@@ -1,0 +1,1756 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>混乱之棋</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+        body {
+            background: #2d2416;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            touch-action: manipulation;
+            overflow: hidden;
+        }
+        .game-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+            max-width: 600px;
+            padding: 8px;
+            background: #3d2b1a;
+            border-radius: 16px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.7);
+            margin: 8px;
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            width: 100%;
+            padding: 6px 12px;
+            color: #f0e0c0;
+            font-size: 16px;
+            font-weight: bold;
+            background: #4d3824;
+            border-radius: 10px 10px 0 0;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+        .turn-indicator {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 15px;
+        }
+        .turn-dot {
+            display: inline-block;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            border: 2px solid #f0e0c0;
+            flex-shrink: 0;
+        }
+        .turn-dot.red {
+            background: #e03030;
+        }
+        .turn-dot.blue {
+            background: #222;
+        }
+        .btn-reset {
+            padding: 4px 16px;
+            background: #7a5a3a;
+            border: none;
+            border-radius: 20px;
+            color: #f0e0c0;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            touch-action: manipulation;
+            transition: background 0.2s;
+        }
+        .btn-reset:active {
+            background: #5a3a1a;
+        }
+        .canvas-wrapper {
+            position: relative;
+            width: 100%;
+            background: #d4b48c;
+            border-radius: 0 0 10px 10px;
+            overflow: hidden;
+            touch-action: none;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: auto;
+            touch-action: none;
+            cursor: pointer;
+            background: #d4b48c;
+        }
+        .status-bar {
+            width: 100%;
+            padding: 6px 12px;
+            text-align: center;
+            color: #f0e0c0;
+            font-size: 14px;
+            background: #4d3824;
+            border-radius: 0 0 10px 10px;
+            min-height: 32px;
+        }
+        .status-bar .highlight {
+            color: #ffd700;
+            font-weight: bold;
+        }
+        /* ===== 规则配置面板 ===== */
+        .config-mask {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            padding: 16px;
+        }
+        .config-mask.hidden { display: none; }
+        .config-panel {
+            width: 100%;
+            max-width: 480px;
+            background: #3d2b1a;
+            border-radius: 16px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.8);
+            padding: 24px 20px;
+            color: #f0e0c0;
+        }
+        .config-panel h2 {
+            text-align: center;
+            margin-bottom: 20px;
+            font-size: 22px;
+            color: #ffd700;
+        }
+        .config-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            margin-bottom: 14px;
+            flex-wrap: wrap;
+        }
+        .config-label {
+            font-size: 15px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex: 1;
+            min-width: 80px;
+        }
+        .config-label .dot {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            border: 1px solid #f0e0c0;
+        }
+        .config-label .dot.red { background: #e03030; }
+        .config-label .dot.blue { background: #222; }
+        .config-select {
+            flex: 2;
+            min-width: 160px;
+            padding: 8px 10px;
+            font-size: 14px;
+            background: #2d2416;
+            color: #f0e0c0;
+            border: 1.5px solid #7a5a3a;
+            border-radius: 8px;
+            outline: none;
+            font-family: inherit;
+            cursor: pointer;
+        }
+        .config-select:focus {
+            border-color: #ffd700;
+        }
+        .config-pos {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 13px;
+            color: #c0b090;
+        }
+        .config-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 22px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        .btn-start {
+            padding: 10px 28px;
+            background: linear-gradient(180deg, #e03030, #a02020);
+            border: 2px solid #ffd700;
+            border-radius: 24px;
+            color: #fff;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            font-family: inherit;
+            transition: transform 0.1s;
+        }
+        .btn-start:active { transform: scale(0.96); }
+        .btn-config-open {
+            padding: 4px 12px;
+            background: #7a5a3a;
+            border: none;
+            border-radius: 20px;
+            color: #f0e0c0;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            touch-action: manipulation;
+        }
+        .btn-config-open:active { background: #5a3a1a; }
+        .go-reserve-info {
+            display: none;
+            font-size: 13px;
+            padding: 4px 10px;
+            background: rgba(255,255,255,0.06);
+            border: 1px solid rgba(255,255,255,0.15);
+            border-radius: 6px;
+            white-space: nowrap;
+        }
+        .go-reserve-info.visible { display: block; }
+        .go-reserve-info .reserve-dot {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            vertical-align: middle;
+            margin-right: 4px;
+        }
+        .go-reserve-info .reserve-dot.red { background: #e8403a; }
+        .go-reserve-info .reserve-dot.blue { background: #222; border: 1px solid #555; }
+        .go-reserve-info b { color: #ffd966; }
+        @media (max-width: 480px) {
+            .header {
+                font-size: 13px;
+                padding: 4px 8px;
+            }
+            .turn-indicator {
+                font-size: 13px;
+            }
+            .turn-dot {
+                width: 14px;
+                height: 14px;
+            }
+            .btn-reset {
+                font-size: 12px;
+                padding: 3px 12px;
+            }
+            .status-bar {
+                font-size: 12px;
+                padding: 4px 8px;
+                min-height: 26px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 规则配置面板 -->
+    <div class="config-mask" id="configMask">
+        <div class="config-panel">
+            <h2>⚔️ 规则设置</h2>
+            <div class="config-row">
+                <div class="config-label"><span class="dot red"></span>红方（下方 · 先手）</div>
+                <select class="config-select" id="redRuleset">
+                    <option value="xiangqi">中国象棋</option>
+                    <option value="chess">国际象棋</option>
+                    <option value="go">围棋</option>
+                </select>
+            </div>
+            <div class="config-row">
+                <div class="config-label"><span class="dot blue"></span>黑方（上方 · 后手）</div>
+                <select class="config-select" id="blueRuleset">
+                    <option value="chess">国际象棋</option>
+                    <option value="xiangqi">中国象棋</option>
+                    <option value="go">围棋</option>
+                </select>
+            </div>
+            <div class="config-row">
+                <span class="config-pos">位置：红方固定在下方（先手），黑方在上方（后手）</span>
+            </div>
+            <div class="config-buttons">
+                <button class="btn-start" id="startBtn">开始对局</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="game-container">
+        <div class="header">
+            <div class="turn-indicator">
+                <span id="turnLabel">红方走</span>
+                <span class="turn-dot red" id="turnDot"></span>
+            </div>
+            <div id="goReserveInfo" class="go-reserve-info"></div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                <button class="btn-config-open" id="configBtn">⚙ 规则</button>
+                <button class="btn-reset" id="resetBtn">🔄 新局</button>
+            </div>
+        </div>
+        <div class="canvas-wrapper">
+            <canvas id="boardCanvas"></canvas>
+        </div>
+        <div class="status-bar" id="statusBar">点击棋子查看走法</div>
+    </div>
+
+    <script>
+        // ============================================================
+        // 常量与配置
+        // ============================================================
+        const COLS = 9;
+        const ROWS = 10;
+        const CELL_SIZE_BASE = 56;
+
+        // 棋子类型（统一命名）
+        const TYPES = {
+            KING: 'king',
+            ADVISOR: 'advisor',
+            ELEPHANT: 'elephant',
+            HORSE: 'horse',
+            ROOK: 'rook',
+            CANNON: 'cannon',
+            PAWN: 'pawn',
+            QUEEN: 'queen',
+            BISHOP: 'bishop',
+            KNIGHT: 'knight',
+            GO_STONE: 'go-stone'
+        };
+
+        const GO_RESERVE_TOTAL = 90; // 围棋方总储备
+
+        // 中国象棋棋子名称（所有使用中国象棋规则的阵营，按颜色换字）
+        const XIANGQI_NAMES_RED = {
+            king: '帅',
+            advisor: '仕',
+            elephant: '相',
+            horse: '傌',
+            rook: '俥',
+            cannon: '炮',
+            pawn: '兵'
+        };
+        const XIANGQI_NAMES_BLUE = {
+            king: '將',
+            advisor: '士',
+            elephant: '象',
+            horse: '馬',
+            rook: '車',
+            cannon: '砲',
+            pawn: '卒'
+        };
+
+        // 国际象棋棋子符号（所有使用国际象棋规则的阵营）
+        const CHESS_SYMBOLS = {
+            king: '♔',
+            queen: '♕',
+            bishop: '♗',
+            knight: '♘',
+            rook: '♖',
+            pawn: '♙'
+        };
+        // 国际象棋棋子字母（备用）
+        const CHESS_LETTERS = {
+            king: 'K',
+            queen: 'Q',
+            bishop: 'B',
+            knight: 'N',
+            rook: 'R',
+            pawn: 'P'
+        };
+
+        // ============================================================
+        // 规则体系配置（谁vs谁都可自定义）
+        // ============================================================
+        const config = {
+            rulesets: {
+                red: 'xiangqi',  // 'xiangqi' | 'chess' | （未来 'go'）
+                blue: 'chess'
+            }
+        };
+
+        // 查询某个颜色当前使用什么规则体系
+        function getRuleset(color) {
+            return config.rulesets[color] || 'xiangqi';
+        }
+        function isXiangqi(color) { return getRuleset(color) === 'xiangqi'; }
+        function isChess(color) { return getRuleset(color) === 'chess'; }
+        function isGo(color) { return getRuleset(color) === 'go'; }
+        function rulesetName(color) {
+            const r = getRuleset(color);
+            if (r === 'xiangqi') return '中国象棋';
+            if (r === 'chess') return '国际象棋';
+            if (r === 'go') return '围棋';
+            return r;
+        }
+
+        // 当前游戏状态
+        let board = [];
+        let currentTurn = 'red'; // 'red' | 'blue'（红方永远先手）
+        let selectedPos = null; // { row, col } 或 null
+        let validMoves = []; // [{ row, col }, ...]
+        let moveHistory = [];
+        // 围棋方储备（只有 isGo 的颜色会用；非围棋方保持0）
+        let goReserve = { red: 0, blue: 0 };
+        // 被吃掉的围棋子计数（用于判断对方是否"吃光"）
+        let goCaptured = { red: 0, blue: 0 };
+        let gameOver = false;
+        let winner = null; // 'red' | 'blue' | null
+        // sidesSwapped 仅在内部工具函数里用于判断九宫/方向；
+        // 现在一律红方在下、黑方在上，所以 sidesSwapped 恒为 false。
+        let sidesSwapped = false;
+
+        // Canvas 相关
+        const canvas = document.getElementById('boardCanvas');
+        const ctx = canvas.getContext('2d');
+        let canvasWidth = 0;
+        let canvasHeight = 0;
+        let cellSize = CELL_SIZE_BASE;
+        let margin = 0;
+        let boardPixelWidth = 0;
+        let boardPixelHeight = 0;
+
+        // DOM 元素
+        const turnLabel = document.getElementById('turnLabel');
+        const turnDot = document.getElementById('turnDot');
+        const goReserveInfo = document.getElementById('goReserveInfo');
+        const statusBar = document.getElementById('statusBar');
+
+        // ============================================================
+        // 棋盘初始化
+        // ============================================================
+        function createInitialBoard() {
+            const b = [];
+            for (let r = 0; r < ROWS; r++) {
+                b[r] = [];
+                for (let c = 0; c < COLS; c++) {
+                    b[r][c] = null;
+                }
+            }
+
+            const chessBack = ['rook', 'knight', 'bishop', 'queen', 'king', 'queen', 'bishop', 'knight', 'rook'];
+            const xiangqiBack = ['rook', 'horse', 'elephant', 'advisor', 'king', 'advisor', 'elephant', 'horse', 'rook'];
+
+            // 重置围棋储备与被吃计数
+            goReserve = { red: 0, blue: 0 };
+            goCaptured = { red: 0, blue: 0 };
+
+            // 上方阵营（黑方）按其 ruleset 布局
+            if (isGo('blue')) {
+                goReserve.blue = GO_RESERVE_TOTAL; // 围棋方开局无棋子，90颗储备
+            } else if (isChess('blue')) {
+                for (let c = 0; c < COLS; c++) b[0][c] = { color: 'blue', type: chessBack[c] };
+                for (let c = 0; c < COLS; c++) b[1][c] = { color: 'blue', type: 'pawn' };
+            } else {
+                for (let c = 0; c < COLS; c++) b[0][c] = { color: 'blue', type: xiangqiBack[c] };
+                b[2][1] = { color: 'blue', type: 'cannon' };
+                b[2][7] = { color: 'blue', type: 'cannon' };
+                for (let c = 0; c < COLS; c += 2) b[3][c] = { color: 'blue', type: 'pawn' };
+            }
+
+            // 下方阵营（红方）按其 ruleset 布局
+            if (isGo('red')) {
+                goReserve.red = GO_RESERVE_TOTAL;
+            } else if (isChess('red')) {
+                for (let c = 0; c < COLS; c++) b[9][c] = { color: 'red', type: chessBack[c] };
+                for (let c = 0; c < COLS; c++) b[8][c] = { color: 'red', type: 'pawn' };
+            } else {
+                for (let c = 0; c < COLS; c++) b[9][c] = { color: 'red', type: xiangqiBack[c] };
+                b[7][1] = { color: 'red', type: 'cannon' };
+                b[7][7] = { color: 'red', type: 'cannon' };
+                for (let c = 0; c < COLS; c += 2) b[6][c] = { color: 'red', type: 'pawn' };
+            }
+
+            return b;
+        }
+
+        // ============================================================
+        // 工具函数（按 ruleset + 颜色位置 判断）
+        // ============================================================
+        function inBoard(r, c) { return r >= 0 && r < ROWS && c >= 0 && c < COLS; }
+
+        // 颜色所在半场：红方=下方，黑方=上方
+        function sideOfColor(color) { return color === 'red' ? 'bottom' : 'top'; }
+
+        // 某个使用中国象棋规则的阵营，它的帅/将九宫在哪
+        function xiangqiPalaceContains(color, r, c) {
+            if (sideOfColor(color) === 'bottom') return r >= 7 && r <= 9 && c >= 3 && c <= 5;
+            return r >= 0 && r <= 2 && c >= 3 && c <= 5;
+        }
+
+        // 通用：某颜色棋子的"合法九宫范围"（中国象棋才有限制，国际象棋全盘）
+        function inPalace(color, r, c) {
+            if (!isXiangqi(color)) return true;
+            return xiangqiPalaceContains(color, r, c);
+        }
+
+        // 某颜色使用中国象棋规则时，其己方半场（相不过河用）
+        function inOwnHalfXiangqi(color, r) {
+            if (sideOfColor(color) === 'bottom') return r >= 5 && r <= 9;
+            return r >= 0 && r <= 4;
+        }
+
+        // 某颜色使用中国象棋规则时，兵是否已过河
+        function xiangqiPawnCrossed(color, row) {
+            // 下方阵营过河=进入上半区(row<=4)，上方阵营过河=进入下半区(row>=5)
+            if (sideOfColor(color) === 'bottom') return row <= 4;
+            return row >= 5;
+        }
+
+        // 某颜色兵的前进方向（行号变化量）：下方向上(-1)，上方向下(+1)
+        function pawnForward(color) {
+            return sideOfColor(color) === 'bottom' ? -1 : +1;
+        }
+
+        // 某颜色使用国际象棋规则时，兵的起始行（判断能否走两格）
+        function chessPawnStartRow(color) {
+            return sideOfColor(color) === 'bottom' ? 8 : 1;
+        }
+
+        // 某颜色使用国际象棋规则时，兵的升变行
+        function chessPawnPromoteRow(color) {
+            return sideOfColor(color) === 'bottom' ? 0 : 9;
+        }
+
+        function isSameColor(p1, p2) {
+            if (!p1 || !p2) return false;
+            return p1.color === p2.color;
+        }
+
+        function isEnemy(color, piece) {
+            if (!piece) return false;
+            return piece.color !== color;
+        }
+
+        function cloneBoard(b) {
+            return b.map(row => row.map(cell => cell ? { ...cell } : null));
+        }
+
+        function findKing(b, color) {
+            for (let r = 0; r < ROWS; r++) {
+                for (let c = 0; c < COLS; c++) {
+                    const p = b[r][c];
+                    if (p && p.color === color && p.type === 'king') {
+                        return { row: r, col: c };
+                    }
+                }
+            }
+            return null;
+        }
+
+        function countPieces(b, color, type) {
+            let n = 0;
+            for (let r = 0; r < ROWS; r++) {
+                for (let c = 0; c < COLS; c++) {
+                    const p = b[r][c];
+                    if (p && p.color === color && p.type === type) n++;
+                }
+            }
+            return n;
+        }
+
+        // ============================================================
+        // 围棋：气与提子算法（所有棋子都有气，无气即被提走）
+        // ============================================================
+        const DIRS4 = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+
+        // 找出 (row,col) 所在同色连通块的所有棋子坐标
+        function findGroup(b, row, col) {
+            const piece = b[row][col];
+            if (!piece) return [];
+            const color = piece.color;
+            const visited = new Set();
+            const group = [];
+            const stack = [[row, col]];
+            while (stack.length) {
+                const [r, c] = stack.pop();
+                const key = r + ',' + c;
+                if (visited.has(key)) continue;
+                visited.add(key);
+                const p = b[r][c];
+                if (!p || p.color !== color) continue;
+                group.push([r, c]);
+                for (const [dr, dc] of DIRS4) {
+                    const nr = r + dr, nc = c + dc;
+                    if (inBoard(nr, nc) && !visited.has(nr + ',' + nc)) {
+                        stack.push([nr, nc]);
+                    }
+                }
+            }
+            return group;
+        }
+
+        // 计算一组棋子的气数（相邻空交叉点数量）
+        function countLiberties(b, group) {
+            const libs = new Set();
+            for (const [r, c] of group) {
+                for (const [dr, dc] of DIRS4) {
+                    const nr = r + dr, nc = c + dc;
+                    if (inBoard(nr, nc) && !b[nr][nc]) libs.add(nr + ',' + nc);
+                }
+            }
+            return libs.size;
+        }
+
+        // 落子/移动后检查提子：先提对方无气组，再提己方无气组（自杀）
+        // 返回被提走的棋子列表 [{row,col,piece}]
+        function resolveCaptures(b, lastColor) {
+            const enemyColor = lastColor === 'red' ? 'blue' : 'red';
+            const captured = [];
+            const removeGroup = (color) => {
+                const checked = new Set();
+                for (let r = 0; r < ROWS; r++) {
+                    for (let c = 0; c < COLS; c++) {
+                        const key = r + ',' + c;
+                        if (checked.has(key)) continue;
+                        const p = b[r][c];
+                        if (p && p.color === color) {
+                            const grp = findGroup(b, r, c);
+                            for (const [gr, gc] of grp) checked.add(gr + ',' + gc);
+                            if (countLiberties(b, grp) === 0) {
+                                for (const [gr, gc] of grp) {
+                                    captured.push({ row: gr, col: gc, piece: b[gr][gc] });
+                                    b[gr][gc] = null;
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+            removeGroup(enemyColor); // 先提对方
+            removeGroup(lastColor);  // 再提己方（自杀）
+            return captured;
+        }
+
+        // 围棋方落子是否为自杀禁手（试落→检查己方是否有气或是否吃到对方）
+        function isGoSuicide(b, row, col, color) {
+            b[row][col] = { color, type: 'go-stone' };
+            const grp = findGroup(b, row, col);
+            const hasLib = countLiberties(b, grp) > 0;
+            // 是否吃到对方
+            const enemy = color === 'red' ? 'blue' : 'red';
+            let captured = false;
+            for (const [dr, dc] of DIRS4) {
+                const nr = row + dr, nc = col + dc;
+                if (inBoard(nr, nc) && b[nr][nc] && b[nr][nc].color === enemy) {
+                    const eg = findGroup(b, nr, nc);
+                    if (countLiberties(b, eg) === 0) { captured = true; break; }
+                }
+            }
+            b[row][col] = null; // 撤销试落
+            return !hasLib && !captured;
+        }
+
+        // ============================================================
+        // 走法生成（核心）
+        // ============================================================
+
+        // 生成某个棋子的所有走法（不包含合法性检查）
+        function generateRawMoves(b, row, col) {
+            const piece = b[row][col];
+            if (!piece) return [];
+            const { color, type } = piece;
+            const moves = [];
+            const enemy = color === 'red' ? 'blue' : 'red';
+
+            const addMove = (r, c) => {
+                if (inBoard(r, c)) {
+                    const target = b[r][c];
+                    if (!target || target.color !== color) {
+                        moves.push({ row: r, col: c });
+                    }
+                }
+            };
+
+            const addLinear = (dr, dc, limit = 9) => {
+                let r = row + dr,
+                    c = col + dc;
+                let steps = 0;
+                while (inBoard(r, c) && steps < limit) {
+                    const target = b[r][c];
+                    if (target) {
+                        if (target.color !== color) moves.push({ row: r, col: c });
+                        break;
+                    }
+                    moves.push({ row: r, col: c });
+                    r += dr;
+                    c += dc;
+                    steps++;
+                }
+            };
+
+            switch (type) {
+                case 'king': {
+                    if (isXiangqi(color)) {
+                        // 中国象棋帅/将：九宫内四方向一步
+                        const dirs = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+                        for (const d of dirs) {
+                            const nr = row + d[0], nc = col + d[1];
+                            if (inPalace(color, nr, nc)) addMove(nr, nc);
+                        }
+                    } else {
+                        // 国际象棋王：八方向一步，全盘走
+                        const dirs = [
+                            [-1, -1], [-1, 0], [-1, 1],
+                            [0, -1], [0, 1],
+                            [1, -1], [1, 0], [1, 1]
+                        ];
+                        for (const d of dirs) {
+                            const nr = row + d[0], nc = col + d[1];
+                            if (inBoard(nr, nc)) addMove(nr, nc);
+                        }
+                    }
+                    break;
+                }
+
+                case 'advisor': {
+                    // 中国象棋仕/士：九宫内斜走一格
+                    const dirs = [[-1, -1], [-1, 1], [1, -1], [1, 1]];
+                    for (const d of dirs) {
+                        const nr = row + d[0], nc = col + d[1];
+                        if (inPalace(color, nr, nc)) addMove(nr, nc);
+                    }
+                    break;
+                }
+
+                case 'elephant': {
+                    // 中国象棋相/象：田字斜走两格，不能过河，有象眼
+                    const dirs = [[-2, -2], [-2, 2], [2, -2], [2, 2]];
+                    for (const d of dirs) {
+                        const nr = row + d[0], nc = col + d[1];
+                        const mr = row + d[0] / 2, mc = col + d[1] / 2;
+                        if (inBoard(nr, nc) && inOwnHalfXiangqi(color, nr) && !b[mr][mc]) {
+                            addMove(nr, nc);
+                        }
+                    }
+                    break;
+                }
+
+                case 'horse': {
+                    if (isXiangqi(color)) {
+                        // 中国象棋马：日字形，有蹩腿
+                        const jumps = [
+                            [-2, -1, -1, 0], [-2, 1, -1, 0],
+                            [2, -1, 1, 0], [2, 1, 1, 0],
+                            [-1, -2, 0, -1], [1, -2, 0, -1],
+                            [-1, 2, 0, 1], [1, 2, 0, 1]
+                        ];
+                        for (const j of jumps) {
+                            const nr = row + j[0], nc = col + j[1];
+                            const mr = row + j[2], mc = col + j[3];
+                            if (inBoard(nr, nc) && !b[mr][mc]) addMove(nr, nc);
+                        }
+                    } else {
+                        // 国际象棋马：L型，不蹩腿
+                        const jumps = [
+                            [-2, -1], [-2, 1], [2, -1], [2, 1],
+                            [-1, -2], [1, -2], [-1, 2], [1, 2]
+                        ];
+                        for (const j of jumps) {
+                            const nr = row + j[0], nc = col + j[1];
+                            if (inBoard(nr, nc)) addMove(nr, nc);
+                        }
+                    }
+                    break;
+                }
+
+                case 'rook': {
+                    // 车：横竖直线（中国象棋车和国际象棋车走法一致）
+                    addLinear(0, 1); addLinear(0, -1);
+                    addLinear(1, 0); addLinear(-1, 0);
+                    break;
+                }
+
+                case 'cannon': {
+                    // 中国象棋炮：横竖直线，吃子需炮架
+                    const dirs = [[0, 1], [0, -1], [1, 0], [-1, 0]];
+                    for (const d of dirs) {
+                        let r = row + d[0], c = col + d[1];
+                        let foundScreen = false;
+                        while (inBoard(r, c)) {
+                            const target = b[r][c];
+                            if (!foundScreen) {
+                                if (target) foundScreen = true;
+                                else moves.push({ row: r, col: c });
+                            } else {
+                                if (target) {
+                                    if (target.color !== color) moves.push({ row: r, col: c });
+                                    break;
+                                }
+                            }
+                            r += d[0];
+                            c += d[1];
+                        }
+                    }
+                    break;
+                }
+
+                case 'pawn': {
+                    if (isXiangqi(color)) {
+                        // 中国象棋兵/卒：向前一步，过河后可横走
+                        const forward = pawnForward(color);
+                        const isCrossed = xiangqiPawnCrossed(color, row);
+                        const nr = row + forward;
+                        if (inBoard(nr, col)) addMove(nr, col);
+                        if (isCrossed) {
+                            if (inBoard(row, col - 1)) addMove(row, col - 1);
+                            if (inBoard(row, col + 1)) addMove(row, col + 1);
+                        }
+                    } else {
+                        // 国际象棋兵：向前走，斜吃；起始位置可两格
+                        const forward = pawnForward(color);
+                        const nr = row + forward;
+                        if (inBoard(nr, col) && !b[nr][col]) {
+                            moves.push({ row: nr, col: col });
+                            if (row === chessPawnStartRow(color)) {
+                                const nr2 = row + 2 * forward;
+                                if (inBoard(nr2, col) && !b[nr2][col]) {
+                                    moves.push({ row: nr2, col: col });
+                                }
+                            }
+                        }
+                        for (const dc of [-1, 1]) {
+                            const nc = col + dc;
+                            if (inBoard(nr, nc)) {
+                                const target = b[nr][nc];
+                                if (target && target.color !== color) {
+                                    moves.push({ row: nr, col: nc });
+                                }
+                            }
+                        }
+                    }
+                    break;
+                }
+
+                case 'queen': {
+                    // 国际象棋后：横竖斜无限
+                    const dirs = [
+                        [0, 1],
+                        [0, -1],
+                        [1, 0],
+                        [-1, 0],
+                        [1, 1],
+                        [1, -1],
+                        [-1, 1],
+                        [-1, -1]
+                    ];
+                    for (const d of dirs) {
+                        let r = row + d[0],
+                            c = col + d[1];
+                        while (inBoard(r, c)) {
+                            const target = b[r][c];
+                            if (target) {
+                                if (target.color !== color) moves.push({ row: r, col: c });
+                                break;
+                            }
+                            moves.push({ row: r, col: c });
+                            r += d[0];
+                            c += d[1];
+                        }
+                    }
+                    break;
+                }
+
+                case 'bishop': {
+                    // 国际象棋象：斜线无限
+                    const dirs = [
+                        [1, 1],
+                        [1, -1],
+                        [-1, 1],
+                        [-1, -1]
+                    ];
+                    for (const d of dirs) {
+                        let r = row + d[0],
+                            c = col + d[1];
+                        while (inBoard(r, c)) {
+                            const target = b[r][c];
+                            if (target) {
+                                if (target.color !== color) moves.push({ row: r, col: c });
+                                break;
+                            }
+                            moves.push({ row: r, col: c });
+                            r += d[0];
+                            c += d[1];
+                        }
+                    }
+                    break;
+                }
+
+                case 'knight': {
+                    // 国际象棋马：L型，不蹩腿（已在horse中处理黑方）
+                    // 但为了安全，这里再处理一次
+                    const jumps = [
+                        [-2, -1],
+                        [-2, 1],
+                        [2, -1],
+                        [2, 1],
+                        [-1, -2],
+                        [1, -2],
+                        [-1, 2],
+                        [1, 2]
+                    ];
+                    for (const j of jumps) {
+                        const nr = row + j[0],
+                            nc = col + j[1];
+                        if (inBoard(nr, nc)) addMove(nr, nc);
+                    }
+                    break;
+                }
+
+                default:
+                    break;
+            }
+
+            return moves;
+        }
+
+        // 检查走一步后，己方王是否会被吃（合法性检查）
+        function isMoveLegal(b, fromRow, fromCol, toRow, toCol, color) {
+            // 模拟走子
+            const testBoard = cloneBoard(b);
+            const captured = testBoard[toRow][toCol];
+            testBoard[toRow][toCol] = testBoard[fromRow][fromCol];
+            testBoard[fromRow][fromCol] = null;
+
+            // 检查己方王是否被吃
+            const king = findKing(testBoard, color);
+            if (!king) return false; // 王被吃，非法
+
+            // 检查所有对方棋子是否能吃掉己方王
+            const enemy = color === 'red' ? 'blue' : 'red';
+            for (let r = 0; r < ROWS; r++) {
+                for (let c = 0; c < COLS; c++) {
+                    const p = testBoard[r][c];
+                    if (p && p.color === enemy) {
+                        const attacks = generateRawMoves(testBoard, r, c);
+                        for (const atk of attacks) {
+                            if (atk.row === king.row && atk.col === king.col) {
+                                return false; // 王被将军，非法
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 额外：中国象棋的帅不能照面（将帅对面）
+            // 检查红帅和蓝王是否在同一列且中间无棋子
+            const redKing = findKing(testBoard, 'red');
+            const blueKing = findKing(testBoard, 'blue');
+            if (redKing && blueKing && redKing.col === blueKing.col) {
+                const c = redKing.col;
+                const rMin = Math.min(redKing.row, blueKing.row);
+                const rMax = Math.max(redKing.row, blueKing.row);
+                let blocked = false;
+                for (let r = rMin + 1; r < rMax; r++) {
+                    if (testBoard[r][c]) { blocked = true; break; }
+                }
+                if (!blocked) return false;
+            }
+
+            return true;
+        }
+
+        // 获取某个棋子的所有合法走法
+        function getLegalMoves(b, row, col) {
+            const piece = b[row][col];
+            if (!piece) return [];
+            const raw = generateRawMoves(b, row, col);
+            const legal = [];
+            for (const m of raw) {
+                if (isMoveLegal(b, row, col, m.row, m.col, piece.color)) {
+                    legal.push(m);
+                }
+            }
+            return legal;
+        }
+
+        // 检查某方是否已败（将死/困毙/围棋方被吃光）
+        function checkGameOver(b, color) {
+            // 围棋方：检查是否被吃光（盘上无go-stone + 储备空）
+            if (isGo(color)) {
+                let stones = 0;
+                for (let r = 0; r < ROWS; r++)
+                    for (let c = 0; c < COLS; c++)
+                        if (b[r][c] && b[r][c].color === color && b[r][c].type === 'go-stone') stones++;
+                if (stones === 0 && goReserve[color] === 0) return true;
+                return false; // 围棋方只要有子或还有储备就不算输
+            }
+            // 象棋方：检查是否有合法走法（将死/困毙）
+            for (let r = 0; r < ROWS; r++) {
+                for (let c = 0; c < COLS; c++) {
+                    const p = b[r][c];
+                    if (p && p.color === color) {
+                        const moves = getLegalMoves(b, r, c);
+                        if (moves.length > 0) return false;
+                    }
+                }
+            }
+            return true;
+        }
+
+        // 检查围棋方是否已围死对方帅/王（围棋方胜利条件）
+        function checkGoWin(b, goColor) {
+            const enemyColor = goColor === 'red' ? 'blue' : 'red';
+            // 围棋vs围棋：双方都无帅/王，只能靠吃光对方所有棋子取胜
+            if (isGo(enemyColor)) return false;
+            const king = findKing(b, enemyColor);
+            return !king; // 对方帅/王不在棋盘上=被提走=围棋方赢
+        }
+
+        // 检查围棋方是否还有合法落子位置（非自杀）
+        function hasValidGoPlacement(b, color) {
+            if (goReserve[color] <= 0) return false;
+            for (let r = 0; r < ROWS; r++) {
+                for (let c = 0; c < COLS; c++) {
+                    if (!b[r][c] && !isGoSuicide(b, r, c, color)) return true;
+                }
+            }
+            return false;
+        }
+
+        // ============================================================
+        // 游戏逻辑
+        // ============================================================
+
+        function switchTurn() {
+            currentTurn = currentTurn === 'red' ? 'blue' : 'red';
+            updateTurnUI();
+
+            // 围棋方胜利检查：对方帅/王是否被围死提走
+            const prevColor = currentTurn === 'red' ? 'blue' : 'red';
+            if (isGo(prevColor) && checkGoWin(board, prevColor)) {
+                gameOver = true;
+                winner = prevColor;
+                const name = (winner === 'red' ? '红方' : '黑方') + `（${rulesetName(winner)}）`;
+                statusBar.innerHTML = `🏆 <span class="highlight">${name}</span> 围死对方主帅，获胜！`;
+                return true;
+            }
+
+            // 检查游戏是否结束
+            if (checkGameOver(board, currentTurn)) {
+                gameOver = true;
+                winner = currentTurn === 'red' ? 'blue' : 'red';
+                const name = (winner === 'red' ? '红方' : '黑方') + `（${rulesetName(winner)}）`;
+                const reason = isGo(currentTurn) ? '围棋方棋子被吃光' : '将死/困毙';
+                statusBar.innerHTML = `🏆 <span class="highlight">${name}</span> 获胜！${reason} · 点击「新局」重新开始`;
+                return true;
+            }
+
+            // 围棋方自动pass：储备空或无合法落子位置
+            if (isGo(currentTurn)) {
+                if (goReserve[currentTurn] <= 0 || !hasValidGoPlacement(board, currentTurn)) {
+                    statusBar.textContent = `${currentTurn === 'red' ? '红方' : '黑方'}（围棋）无子可下，跳过`;
+                    return switchTurn(); // 递归切换给对方
+                }
+                statusBar.textContent = `${currentTurn === 'red' ? '红方' : '黑方'}（围棋）落子 · 剩余${goReserve[currentTurn]}颗`;
+                return false;
+            }
+
+            // 象棋方：检查是否被将军（提示）
+            const king = findKing(board, currentTurn);
+            if (king) {
+                const enemy = currentTurn === 'red' ? 'blue' : 'red';
+                let inCheck = false;
+                for (let r = 0; r < ROWS; r++) {
+                    for (let c = 0; c < COLS; c++) {
+                        const p = board[r][c];
+                        if (p && p.color === enemy) {
+                            const moves = generateRawMoves(board, r, c);
+                            for (const m of moves) {
+                                if (m.row === king.row && m.col === king.col) {
+                                    inCheck = true;
+                                    break;
+                                }
+                            }
+                        }
+                        if (inCheck) break;
+                    }
+                    if (inCheck) break;
+                }
+                if (inCheck) {
+                    statusBar.innerHTML = `⚠️ <span class="highlight">${currentTurn === 'red' ? '红方' : '黑方'}</span> 被将军！`;
+                } else {
+                    statusBar.textContent = `${currentTurn === 'red' ? '红方' : '黑方'} 走棋`;
+                }
+            }
+            return false;
+        }
+
+        function makeMove(fromRow, fromCol, toRow, toCol) {
+            const piece = board[fromRow][fromCol];
+            if (!piece) return false;
+            const captured = board[toRow][toCol];
+            // 记录历史
+            moveHistory.push({
+                from: { row: fromRow, col: fromCol },
+                to: { row: toRow, col: toCol },
+                piece: { ...piece },
+                captured: captured ? { ...captured } : null
+            });
+            // 执行移动
+            board[toRow][toCol] = piece;
+            board[fromRow][fromCol] = null;
+
+            // 国际象棋兵升变（任意一方，只要用国际象棋规则，兵到达对侧底线即升变为后）
+            if (isChess(piece.color) && piece.type === 'pawn' && toRow === chessPawnPromoteRow(piece.color)) {
+                board[toRow][toCol] = { color: piece.color, type: 'queen' };
+                const cn = piece.color === 'red' ? '红方' : '黑方';
+                statusBar.textContent = `${cn}兵升变为后！`;
+            }
+
+            // 触发提子（移动可能堵死某组棋子的气）
+            const caps = resolveCaptures(board, piece.color);
+            for (const cap of caps) {
+                if (cap.piece.type === 'go-stone') goCaptured[cap.piece.color]++;
+            }
+
+            selectedPos = null;
+            validMoves = [];
+            drawBoard();
+
+            // 切换回合
+            const over = switchTurn();
+            if (!over) {
+                drawBoard();
+                if (statusBar.textContent.indexOf('将军') === -1 && statusBar.textContent.indexOf('获胜') === -1) {
+                    statusBar.textContent = `${currentTurn === 'red' ? '红方' : '黑方'} 走棋`;
+                }
+            }
+            drawBoard();
+            return true;
+        }
+
+        // 围棋方落子
+        function placeGoStone(row, col) {
+            const color = currentTurn;
+            board[row][col] = { color, type: 'go-stone' };
+            goReserve[color]--;
+
+            // 触发提子
+            const caps = resolveCaptures(board, color);
+            for (const cap of caps) {
+                if (cap.piece.type === 'go-stone') goCaptured[cap.piece.color]++;
+            }
+
+            const cn = color === 'red' ? '红方' : '黑方';
+            const reserveInfo = `（剩余${goReserve[color]}颗）`;
+            if (caps.length > 0) {
+                statusBar.textContent = `${cn}落子${reserveInfo}，提走${caps.length}颗棋子`;
+            } else {
+                statusBar.textContent = `${cn}落子${reserveInfo}`;
+            }
+
+            selectedPos = null;
+            validMoves = [];
+            drawBoard();
+
+            const over = switchTurn();
+            if (!over) {
+                drawBoard();
+                if (statusBar.textContent.indexOf('将军') === -1 && statusBar.textContent.indexOf('获胜') === -1) {
+                    statusBar.textContent = `${currentTurn === 'red' ? '红方' : '黑方'} 走棋`;
+                }
+            }
+            drawBoard();
+        }
+
+        function resetGame() {
+            board = createInitialBoard();
+            currentTurn = 'red'; // 红方永远先手
+            selectedPos = null;
+            validMoves = [];
+            moveHistory = [];
+            gameOver = false;
+            winner = null;
+            updateTurnUI();
+            const first = `红方（${rulesetName('red')}）`;
+            const second = `黑方（${rulesetName('blue')}）`;
+            statusBar.textContent = `新局！${first}先手 vs ${second}后手 · 点击棋子查看走法`;
+            drawBoard();
+        }
+
+        function updateTurnUI() {
+            turnLabel.textContent = currentTurn === 'red' ? '红方走' : '黑方走';
+            turnDot.className = 'turn-dot ' + currentTurn;
+            // 围棋方剩余储备子数显示
+            const parts = [];
+            if (isGo('red') && goReserve.red > 0) {
+                parts.push(`<span class="reserve-dot red"></span>红方围棋剩余 <b>${goReserve.red}</b> 颗`);
+            }
+            if (isGo('blue') && goReserve.blue > 0) {
+                parts.push(`<span class="reserve-dot blue"></span>黑方围棋剩余 <b>${goReserve.blue}</b> 颗`);
+            }
+            if (parts.length > 0) {
+                goReserveInfo.innerHTML = parts.join('　');
+                goReserveInfo.classList.add('visible');
+            } else {
+                goReserveInfo.classList.remove('visible');
+                goReserveInfo.innerHTML = '';
+            }
+        }
+
+        // ===== 配置面板交互 =====
+        const configMask = document.getElementById('configMask');
+        const redSel = document.getElementById('redRuleset');
+        const blueSel = document.getElementById('blueRuleset');
+
+        function openConfig() {
+            redSel.value = config.rulesets.red;
+            blueSel.value = config.rulesets.blue;
+            configMask.classList.remove('hidden');
+        }
+        function closeConfig() { configMask.classList.add('hidden'); }
+        function startFromConfig() {
+            config.rulesets.red = redSel.value;
+            config.rulesets.blue = blueSel.value;
+            closeConfig();
+            resetGame();
+        }
+
+        // ============================================================
+        // 交互逻辑
+        // ============================================================
+
+        function handleCanvasClick(e) {
+            if (gameOver) return;
+            const rect = canvas.getBoundingClientRect();
+            const clientX = e.clientX != null ? e.clientX : (e.touches && e.touches[0] && e.touches[0].clientX);
+            const clientY = e.clientY != null ? e.clientY : (e.touches && e.touches[0] && e.touches[0].clientY);
+            if (clientX == null || clientY == null) return;
+
+            const x = clientX - rect.left;
+            const y = clientY - rect.top;
+
+            let col = Math.round((x - margin) / cellSize);
+            let row = Math.round((y - margin) / cellSize);
+            if (col < 0 || col >= COLS || row < 0 || row >= ROWS) return;
+
+            // 围棋方：点击空位落子
+            if (isGo(currentTurn)) {
+                if (board[row][col]) {
+                    statusBar.textContent = '该位置已有棋子';
+                    return;
+                }
+                if (goReserve[currentTurn] <= 0) {
+                    statusBar.textContent = '围棋方储备已空，自动跳过';
+                    return;
+                }
+                if (isGoSuicide(board, row, col, currentTurn)) {
+                    statusBar.textContent = '自杀禁手：该位置落子后无气且不能吃子';
+                    return;
+                }
+                placeGoStone(row, col);
+                return;
+            }
+
+            const piece = board[row][col];
+
+            // 如果已经选中了一个棋子
+            if (selectedPos) {
+                // 检查是否点击了合法走法
+                const isTarget = validMoves.some(m => m.row === row && m.col === col);
+                if (isTarget) {
+                    // 执行移动
+                    makeMove(selectedPos.row, selectedPos.col, row, col);
+                    return;
+                }
+
+                // 点击了自己的另一个棋子 -> 切换选择
+                if (piece && piece.color === currentTurn) {
+                    selectedPos = { row, col };
+                    validMoves = getLegalMoves(board, row, col);
+                    drawBoard();
+                    if (validMoves.length === 0) {
+                        statusBar.textContent = '该棋子无合法走法';
+                    } else {
+                        statusBar.textContent = `已选择 ${piece.color === 'red' ? '红' : '黑'}${piece.type}，点击高亮位置移动`;
+                    }
+                    return;
+                }
+
+                // 点击其他位置 -> 取消选择
+                selectedPos = null;
+                validMoves = [];
+                drawBoard();
+                statusBar.textContent = `${currentTurn === 'red' ? '红方' : '黑方'} 走棋`;
+                return;
+            }
+
+            // 没有选中任何棋子
+            if (piece && piece.color === currentTurn) {
+                const moves = getLegalMoves(board, row, col);
+                if (moves.length === 0) {
+                    statusBar.textContent = '该棋子无合法走法';
+                    return;
+                }
+                selectedPos = { row, col };
+                validMoves = moves;
+                drawBoard();
+                statusBar.textContent = `已选择 ${piece.color === 'red' ? '红' : '黑'}${piece.type}，点击高亮位置移动`;
+            } else {
+                statusBar.textContent = `请选择 ${currentTurn === 'red' ? '红方' : '黑方'} 棋子`;
+            }
+        }
+
+        // ============================================================
+        // 绘制
+        // ============================================================
+
+        function resizeCanvas() {
+            const wrapper = canvas.parentElement;
+            const wrapperWidth = wrapper.clientWidth || 400;
+            // 棋盘宽高比 = 8:9 (因为9列10行交叉点)
+            const targetWidth = Math.min(wrapperWidth, 600);
+            const targetHeight = targetWidth * 9 / 8;
+            canvas.style.width = targetWidth + 'px';
+            canvas.style.height = targetHeight + 'px';
+
+            // 实际像素尺寸（用2倍清晰度）
+            const dpr = window.devicePixelRatio || 1;
+            const logicalWidth = targetWidth;
+            const logicalHeight = targetHeight;
+            canvas.width = logicalWidth * dpr;
+            canvas.height = logicalHeight * dpr;
+            canvas.style.width = logicalWidth + 'px';
+            canvas.style.height = logicalHeight + 'px';
+            ctx.scale(dpr, dpr);
+
+            canvasWidth = logicalWidth;
+            canvasHeight = logicalHeight;
+
+            // 计算格子大小
+            const padding = 20;
+            const maxCellW = (logicalWidth - padding * 2) / 8;
+            const maxCellH = (logicalHeight - padding * 2) / 9;
+            cellSize = Math.min(maxCellW, maxCellH);
+            margin = (logicalWidth - cellSize * 8) / 2;
+            // 调整margin使得棋盘垂直居中
+            const boardH = cellSize * 9;
+            const marginV = (logicalHeight - boardH) / 2;
+            // 使用统一的margin
+            margin = Math.min(margin, marginV);
+            // 重新计算实际使用的大小
+            boardPixelWidth = cellSize * 8;
+            boardPixelHeight = cellSize * 9;
+            // 重新调整margin使棋盘居中
+            margin = (logicalWidth - boardPixelWidth) / 2;
+
+            drawBoard();
+        }
+
+        function getPos(row, col) {
+            return {
+                x: margin + col * cellSize,
+                y: margin + row * cellSize
+            };
+        }
+
+        function drawBoard() {
+            const w = canvasWidth;
+            const h = canvasHeight;
+            ctx.clearRect(0, 0, w, h);
+
+            // 背景
+            const grad = ctx.createLinearGradient(0, 0, w, h);
+            grad.addColorStop(0, '#d4b48c');
+            grad.addColorStop(1, '#c4a47c');
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, w, h);
+
+            // 楚河汉界河流背景（行4到行5之间的横带）
+            const riverTop = margin + 4 * cellSize;
+            const riverBottom = margin + 5 * cellSize;
+            const riverLeft = margin;
+            const riverRight = margin + 8 * cellSize;
+            const riverGrad = ctx.createLinearGradient(0, riverTop, 0, riverBottom);
+            riverGrad.addColorStop(0, '#8ec5e8');
+            riverGrad.addColorStop(0.5, '#6aa6d6');
+            riverGrad.addColorStop(1, '#8ec5e8');
+            ctx.fillStyle = riverGrad;
+            ctx.fillRect(riverLeft, riverTop, riverRight - riverLeft, riverBottom - riverTop);
+
+            // 绘制网格线
+            ctx.strokeStyle = '#5a3a2a';
+            ctx.lineWidth = 1.2;
+
+            // 竖线 (列0-8)
+            for (let c = 0; c < COLS; c++) {
+                const x = margin + c * cellSize;
+                const yTop = margin;
+                const yBottom = margin + 9 * cellSize;
+                // 楚河汉界处断开
+                if (c === 0 || c === COLS - 1) {
+                    ctx.beginPath();
+                    ctx.moveTo(x, yTop);
+                    ctx.lineTo(x, yBottom);
+                    ctx.stroke();
+                } else {
+                    // 上半
+                    ctx.beginPath();
+                    ctx.moveTo(x, yTop);
+                    ctx.lineTo(x, margin + 4 * cellSize);
+                    ctx.stroke();
+                    // 下半
+                    ctx.beginPath();
+                    ctx.moveTo(x, margin + 5 * cellSize);
+                    ctx.lineTo(x, yBottom);
+                    ctx.stroke();
+                }
+            }
+
+            // 横线 (行0-9)
+            for (let r = 0; r < ROWS; r++) {
+                const y = margin + r * cellSize;
+                const xLeft = margin;
+                const xRight = margin + 8 * cellSize;
+                ctx.beginPath();
+                ctx.moveTo(xLeft, y);
+                ctx.lineTo(xRight, y);
+                ctx.stroke();
+            }
+
+            // 九宫格斜线
+            // 红方 (行7-9, 列3-5)
+            ctx.beginPath();
+            ctx.moveTo(margin + 3 * cellSize, margin + 7 * cellSize);
+            ctx.lineTo(margin + 5 * cellSize, margin + 9 * cellSize);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(margin + 5 * cellSize, margin + 7 * cellSize);
+            ctx.lineTo(margin + 3 * cellSize, margin + 9 * cellSize);
+            ctx.stroke();
+
+            // 黑方 (行0-2, 列3-5)
+            ctx.beginPath();
+            ctx.moveTo(margin + 3 * cellSize, margin + 0 * cellSize);
+            ctx.lineTo(margin + 5 * cellSize, margin + 2 * cellSize);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(margin + 5 * cellSize, margin + 0 * cellSize);
+            ctx.lineTo(margin + 3 * cellSize, margin + 2 * cellSize);
+            ctx.stroke();
+
+            // 楚河汉界
+            const midY = margin + 4.5 * cellSize;
+            ctx.fillStyle = '#3a2a1a';
+            ctx.font = `bold ${cellSize * 0.5}px "KaiTi", "STKaiti", serif`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('楚  河', margin + 2 * cellSize, midY);
+            ctx.fillText('汉  界', margin + 6 * cellSize, midY);
+
+            // 兵/炮位标记 (小十字)：根据双方 ruleset 决定位置
+            const marks = [];
+            // 下方阵营（红方）
+            if (isXiangqi('red')) {
+                for (let c = 0; c < COLS; c += 2) marks.push({ r: 6, c });
+                marks.push({ r: 7, c: 1 }, { r: 7, c: 7 });
+            } else {
+                for (let c = 0; c < COLS; c++) marks.push({ r: 8, c });
+            }
+            // 上方阵营（黑方）
+            if (isXiangqi('blue')) {
+                for (let c = 0; c < COLS; c += 2) marks.push({ r: 3, c });
+                marks.push({ r: 2, c: 1 }, { r: 2, c: 7 });
+            } else {
+                for (let c = 0; c < COLS; c++) marks.push({ r: 1, c });
+            }
+            const markSize = cellSize * 0.12;
+            for (const m of marks) {
+                const pos = getPos(m.r, m.c);
+                drawCross(pos.x, pos.y, markSize);
+            }
+
+            // 绘制所有棋子
+            for (let r = 0; r < ROWS; r++) {
+                for (let c = 0; c < COLS; c++) {
+                    const piece = board[r][c];
+                    if (piece) {
+                        drawPiece(r, c, piece);
+                    }
+                }
+            }
+
+            // 绘制高亮（走法提示）
+            for (const m of validMoves) {
+                const pos = getPos(m.row, m.col);
+                const target = board[m.row][m.col];
+                if (target) {
+                    // 可吃子：红色圆圈
+                    ctx.beginPath();
+                    ctx.arc(pos.x, pos.y, cellSize * 0.42, 0, Math.PI * 2);
+                    ctx.fillStyle = 'rgba(255, 50, 50, 0.35)';
+                    ctx.fill();
+                    ctx.strokeStyle = 'rgba(255, 50, 50, 0.7)';
+                    ctx.lineWidth = 2.5;
+                    ctx.stroke();
+                } else {
+                    // 可走位置：绿色圆点
+                    ctx.beginPath();
+                    ctx.arc(pos.x, pos.y, cellSize * 0.18, 0, Math.PI * 2);
+                    ctx.fillStyle = 'rgba(50, 200, 50, 0.6)';
+                    ctx.fill();
+                    ctx.strokeStyle = 'rgba(50, 200, 50, 0.8)';
+                    ctx.lineWidth = 1.5;
+                    ctx.stroke();
+                }
+            }
+
+            // 选中棋子高亮
+            if (selectedPos) {
+                const pos = getPos(selectedPos.row, selectedPos.col);
+                ctx.beginPath();
+                ctx.arc(pos.x, pos.y, cellSize * 0.46, 0, Math.PI * 2);
+                ctx.strokeStyle = '#ffd700';
+                ctx.lineWidth = 3;
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.arc(pos.x, pos.y, cellSize * 0.42, 0, Math.PI * 2);
+                ctx.strokeStyle = 'rgba(255, 215, 0, 0.3)';
+                ctx.lineWidth = 6;
+                ctx.stroke();
+            }
+
+            // 游戏结束遮罩
+            if (gameOver) {
+                ctx.fillStyle = 'rgba(0,0,0,0.3)';
+                ctx.fillRect(0, 0, w, h);
+                ctx.fillStyle = '#ffd700';
+                ctx.font = `bold ${cellSize * 0.8}px "PingFang SC", "Microsoft YaHei", sans-serif`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                const winnerName = (winner === 'red' ? '红方' : '黑方') + `（${rulesetName(winner)}）`;
+                ctx.fillText(`🏆 ${winnerName} 获胜`, w / 2, h / 2);
+            }
+        }
+
+        function drawCross(x, y, size) {
+            ctx.strokeStyle = '#5a3a2a';
+            ctx.lineWidth = 1.2;
+            const s = size;
+            // 横
+            ctx.beginPath();
+            ctx.moveTo(x - s, y);
+            ctx.lineTo(x + s, y);
+            ctx.stroke();
+            // 竖
+            ctx.beginPath();
+            ctx.moveTo(x, y - s);
+            ctx.lineTo(x, y + s);
+            ctx.stroke();
+            // 小斜角
+            const d = s * 0.3;
+            ctx.beginPath();
+            ctx.moveTo(x - s, y - d);
+            ctx.lineTo(x - s + d, y - s);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(x + s, y - d);
+            ctx.lineTo(x + s - d, y - s);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(x - s, y + d);
+            ctx.lineTo(x - s + d, y + s);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(x + s, y + d);
+            ctx.lineTo(x + s - d, y + s);
+            ctx.stroke();
+        }
+
+        function drawPiece(row, col, piece) {
+            const pos = getPos(row, col);
+            const x = pos.x,
+                y = pos.y;
+            const radius = cellSize * 0.42;
+            const isRed = piece.color === 'red';
+
+            // 围棋子：画实心圆，无文字
+            if (piece.type === 'go-stone') {
+                ctx.shadowColor = 'rgba(0,0,0,0.4)';
+                ctx.shadowBlur = 5;
+                ctx.shadowOffsetX = 1;
+                ctx.shadowOffsetY = 2;
+                const grad = ctx.createRadialGradient(x - radius * 0.3, y - radius * 0.3, radius * 0.1, x, y, radius);
+                if (isRed) {
+                    grad.addColorStop(0, '#ff6060');
+                    grad.addColorStop(0.6, '#d02020');
+                    grad.addColorStop(1, '#700000');
+                } else {
+                    grad.addColorStop(0, '#808090');
+                    grad.addColorStop(0.6, '#303040');
+                    grad.addColorStop(1, '#000010');
+                }
+                ctx.beginPath();
+                ctx.arc(x, y, radius, 0, Math.PI * 2);
+                ctx.fillStyle = grad;
+                ctx.fill();
+                ctx.shadowBlur = 0;
+                ctx.shadowOffsetX = 0;
+                ctx.shadowOffsetY = 0;
+                ctx.strokeStyle = isRed ? 'rgba(255,180,180,0.6)' : 'rgba(180,180,200,0.6)';
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.arc(x, y, radius, 0, Math.PI * 2);
+                ctx.stroke();
+                return;
+            }
+
+            // 阴影
+            ctx.shadowColor = 'rgba(0,0,0,0.3)';
+            ctx.shadowBlur = 6;
+            ctx.shadowOffsetX = 2;
+            ctx.shadowOffsetY = 2;
+
+            // 棋子圆形
+            const grad = ctx.createRadialGradient(x - radius * 0.3, y - radius * 0.3, radius * 0.1, x, y, radius);
+            if (isRed) {
+                grad.addColorStop(0, '#f06060');
+                grad.addColorStop(0.7, '#c02020');
+                grad.addColorStop(1, '#801010');
+            } else {
+                grad.addColorStop(0, '#555');
+                grad.addColorStop(0.7, '#222');
+                grad.addColorStop(1, '#000');
+            }
+            ctx.beginPath();
+            ctx.arc(x, y, radius, 0, Math.PI * 2);
+            ctx.fillStyle = grad;
+            ctx.fill();
+
+            // 边框
+            ctx.shadowBlur = 0;
+            ctx.shadowOffsetX = 0;
+            ctx.shadowOffsetY = 0;
+            ctx.strokeStyle = isRed ? '#ffcc88' : '#aaa';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(x, y, radius, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // 内圈
+            ctx.strokeStyle = isRed ? 'rgba(255,220,180,0.5)' : 'rgba(200,200,200,0.4)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.arc(x, y, radius * 0.78, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // 文字
+            ctx.shadowBlur = 0;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            let text = '';
+            let fontSize = radius * 0.75;
+
+            const useXiangqi = isXiangqi(isRed ? 'red' : 'blue');
+            if (useXiangqi) {
+                text = (isRed ? XIANGQI_NAMES_RED : XIANGQI_NAMES_BLUE)[piece.type] || piece.type;
+                ctx.fillStyle = isRed ? '#ffeedd' : '#f0f0f0';
+                ctx.shadowColor = isRed ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.3)';
+                ctx.shadowBlur = 4;
+                ctx.shadowOffsetX = 1;
+                ctx.shadowOffsetY = 1;
+            } else {
+                // 使用国际象棋规则：优先用Unicode符号，不支持则回退字母
+                const sym = CHESS_SYMBOLS[piece.type];
+                ctx.font = `bold ${fontSize}px "Segoe UI Symbol", "Arial Unicode MS", sans-serif`;
+                const metrics = ctx.measureText(sym);
+                if (metrics.width < fontSize * 0.3) {
+                    text = CHESS_LETTERS[piece.type] || piece.type;
+                } else {
+                    text = sym;
+                }
+                ctx.fillStyle = isRed ? '#fff0f0' : '#f0f0f0';
+                ctx.shadowColor = isRed ? 'rgba(20,0,0,0.5)' : 'rgba(255,255,255,0.3)';
+                ctx.shadowBlur = 4;
+                ctx.shadowOffsetX = 1;
+                ctx.shadowOffsetY = 1;
+            }
+
+            ctx.font = `bold ${fontSize}px "PingFang SC", "Microsoft YaHei", "Segoe UI Symbol", "Arial Unicode MS", sans-serif`;
+            // 对于国际象棋Unicode符号，使用更大的字体
+            if (!useXiangqi && text.length === 1 && text.charCodeAt(0) > 0x2600) {
+                ctx.font = `bold ${fontSize * 1.1}px "Segoe UI Symbol", "Arial Unicode MS", sans-serif`;
+            }
+            ctx.fillText(text, x, y + (useXiangqi ? 1 : 0));
+
+            // 重置阴影
+            ctx.shadowBlur = 0;
+            ctx.shadowOffsetX = 0;
+            ctx.shadowOffsetY = 0;
+        }
+
+        // ============================================================
+        // 事件绑定与初始化
+        // ============================================================
+
+        canvas.addEventListener('click', handleCanvasClick);
+        canvas.addEventListener('touchstart', function(e) {
+            e.preventDefault();
+            handleCanvasClick(e);
+        }, { passive: false });
+
+        document.getElementById('resetBtn').addEventListener('click', resetGame);
+        document.getElementById('configBtn').addEventListener('click', openConfig);
+        document.getElementById('startBtn').addEventListener('click', startFromConfig);
+        // 点击蒙层空白处也可关闭（可选）
+        configMask.addEventListener('click', function(e) {
+            if (e.target === configMask) closeConfig();
+        });
+
+        window.addEventListener('resize', resizeCanvas);
+
+        // 初始化
+        function init() {
+            board = createInitialBoard();
+            currentTurn = 'red'; // 红方永远先手
+            selectedPos = null;
+            validMoves = [];
+            gameOver = false;
+            winner = null;
+            updateTurnUI();
+            const first = `红方（${rulesetName('red')}）`;
+            const second = `黑方（${rulesetName('blue')}）`;
+            statusBar.textContent = `游戏已加载！${first}先手 vs ${second}后手 · 点击棋子查看走法`;
+            resizeCanvas();
+            // 首次加载自动弹出规则设置，让用户选谁 vs 谁
+            openConfig();
+        }
+
+        // 延迟一帧以确保布局完成
+        setTimeout(init, 50);
+
+        // 处理窗口方向变化
+        window.addEventListener('orientationchange', function() {
+            setTimeout(resizeCanvas, 300);
+        });
+
+        console.log('🎯 混乱之棋 已加载！');
+        console.log('红方（中国象棋）: 帅仕相马车炮兵');
+        console.log('黑方（国际象棋）: ♔♕♗♘♖♙');
+        console.log('点击棋子查看走法，点击高亮位置移动');
+    </script>
+
+</body>
+</html>
