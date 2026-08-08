@@ -114,6 +114,13 @@
             color: #ffd700;
             font-weight: bold;
         }
+        .status-bar.victory {
+            background: linear-gradient(180deg, #5a3a1a, #3d2b1a);
+            color: #ffd700;
+            font-size: 15px;
+            font-weight: bold;
+            letter-spacing: 1px;
+        }
         /* ===== 规则配置面板 ===== */
         .config-mask {
             position: fixed;
@@ -243,6 +250,49 @@
         .go-reserve-info .reserve-dot.red { background: #e8403a; }
         .go-reserve-info .reserve-dot.blue { background: #222; border: 1px solid #555; }
         .go-reserve-info b { color: #ffd966; }
+        .shogi-hand-area {
+            display: none;
+            gap: 2px;
+            flex-wrap: wrap;
+            align-items: center;
+            font-size: 12px;
+        }
+        .shogi-hand-area.visible { display: flex; }
+        .shogi-hand-piece {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 26px;
+            height: 26px;
+            border-radius: 50%;
+            background: #2d2416;
+            border: 1.5px solid #7a5a3a;
+            color: #f0e0c0;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            touch-action: manipulation;
+            transition: all 0.15s;
+            position: relative;
+        }
+        .shogi-hand-piece:hover, .shogi-hand-piece.selected {
+            border-color: #ffd700;
+            background: #4d3824;
+            transform: scale(1.1);
+        }
+        .shogi-hand-piece .hand-count {
+            position: absolute;
+            top: -4px;
+            right: -4px;
+            background: #e03030;
+            color: #fff;
+            border-radius: 50%;
+            width: 14px;
+            height: 14px;
+            font-size: 10px;
+            line-height: 14px;
+            text-align: center;
+        }
         @media (max-width: 480px) {
             .header {
                 font-size: 13px;
@@ -279,6 +329,9 @@
                     <option value="xiangqi">中国象棋</option>
                     <option value="chess">国际象棋</option>
                     <option value="go">围棋</option>
+                    <option value="gomoku">五子棋</option>
+                    <option value="checkers">国际跳棋</option>
+                    <option value="shogi">将棋</option>
                 </select>
             </div>
             <div class="config-row">
@@ -287,10 +340,21 @@
                     <option value="chess">国际象棋</option>
                     <option value="xiangqi">中国象棋</option>
                     <option value="go">围棋</option>
+                    <option value="gomoku">五子棋</option>
+                    <option value="checkers">国际跳棋</option>
+                    <option value="shogi">将棋</option>
                 </select>
             </div>
             <div class="config-row">
                 <span class="config-pos">位置：红方固定在下方（先手），黑方在上方（后手）</span>
+            </div>
+            <div class="config-row">
+                <div class="config-label">🤖 人机模式</div>
+                <select class="config-select" id="aiSelect">
+                    <option value="none">无</option>
+                    <option value="red">红方</option>
+                    <option value="blue">黑方</option>
+                </select>
             </div>
             <div class="config-buttons">
                 <button class="btn-start" id="startBtn">开始对局</button>
@@ -305,6 +369,7 @@
                 <span class="turn-dot red" id="turnDot"></span>
             </div>
             <div id="goReserveInfo" class="go-reserve-info"></div>
+            <div id="shogiHandArea" class="shogi-hand-area"></div>
             <div style="display:flex;gap:6px;flex-wrap:wrap;">
                 <button class="btn-config-open" id="configBtn">⚙ 规则</button>
                 <button class="btn-reset" id="resetBtn">🔄 新局</button>
@@ -340,45 +405,78 @@
         };
 
         const GO_RESERVE_TOTAL = 90; // 围棋方总储备
+        const GOMOKU_RESERVE_TOTAL = 90; // 五子棋方总储备
 
         // 中国象棋棋子名称（所有使用中国象棋规则的阵营，按颜色换字）
         const XIANGQI_NAMES_RED = {
-            king: '帅',
+            'xiangqi-king': '帅',
             advisor: '仕',
             elephant: '相',
             horse: '傌',
-            rook: '俥',
+            'xiangqi-rook': '俥',
             cannon: '炮',
-            pawn: '兵'
+            'xiangqi-pawn': '兵'
         };
         const XIANGQI_NAMES_BLUE = {
-            king: '將',
+            'xiangqi-king': '將',
             advisor: '士',
             elephant: '象',
             horse: '馬',
-            rook: '車',
+            'xiangqi-rook': '車',
             cannon: '砲',
-            pawn: '卒'
+            'xiangqi-pawn': '卒'
         };
 
-        // 国际象棋棋子符号（所有使用国际象棋规则的阵营）
+        // 国际象棋棋子符号（所有使用国际象棋规则的阵营，跳棋也复用此符号体系）
         const CHESS_SYMBOLS = {
-            king: '♔',
+            'chess-king': '♔',
             queen: '♕',
             bishop: '♗',
             knight: '♘',
-            rook: '♖',
-            pawn: '♙'
+            'chess-rook': '♖',
+            'chess-pawn': '♙',
+            'checker-man': '♙',
+            'checker-king': '♕'
         };
-        // 国际象棋棋子字母（备用）
+
+        // 将棋棋子显示名
+        const SHOGI_NAMES = {
+            'shogi-king': '玉',
+            'shogi-rook': '飛',
+            'shogi-bishop': '角',
+            'shogi-gold': '金',
+            'shogi-silver': '銀',
+            'shogi-knight': '桂',
+            'shogi-lance': '香',
+            'shogi-pawn': '歩'
+        };
+        // 将棋升变后显示名
+        const SHOGI_PROMOTED_NAMES = {
+            'shogi-rook': '龍',
+            'shogi-bishop': '馬',
+            'shogi-silver': '成',
+            'shogi-knight': '成',
+            'shogi-lance': '成',
+            'shogi-pawn': '成'
+        };
+        // 升变后走法变金将的棋子类型
+        const SHOGI_PROMOTABLE = ['shogi-silver', 'shogi-knight', 'shogi-lance', 'shogi-pawn'];
+        // 国际象棋字母备选（字体不支持符号时用）
         const CHESS_LETTERS = {
-            king: 'K',
+            'chess-king': 'K',
             queen: 'Q',
             bishop: 'B',
             knight: 'N',
-            rook: 'R',
-            pawn: 'P'
+            'chess-rook': 'R',
+            'chess-pawn': 'P'
         };
+        // 手持棋子基础类型映射（升变子被吃后降级）
+        function shogiBaseType(type) {
+            if (type === 'shogi-dragon') return 'shogi-rook';
+            if (type === 'shogi-horse') return 'shogi-bishop';
+            if (SHOGI_PROMOTABLE.includes(type)) return type; // promoted flag控制走法，type不变
+            return type;
+        }
 
         // ============================================================
         // 规则体系配置（谁vs谁都可自定义）
@@ -397,11 +495,17 @@
         function isXiangqi(color) { return getRuleset(color) === 'xiangqi'; }
         function isChess(color) { return getRuleset(color) === 'chess'; }
         function isGo(color) { return getRuleset(color) === 'go'; }
+        function isGomoku(color) { return getRuleset(color) === 'gomoku'; }
+        function isCheckers(color) { return getRuleset(color) === 'checkers'; }
+        function isShogi(color) { return getRuleset(color) === 'shogi'; }
         function rulesetName(color) {
             const r = getRuleset(color);
             if (r === 'xiangqi') return '中国象棋';
             if (r === 'chess') return '国际象棋';
             if (r === 'go') return '围棋';
+            if (r === 'gomoku') return '五子棋';
+            if (r === 'checkers') return '国际跳棋';
+            if (r === 'shogi') return '将棋';
             return r;
         }
 
@@ -417,6 +521,15 @@
         let goCaptured = { red: 0, blue: 0 };
         let gameOver = false;
         let winner = null; // 'red' | 'blue' | null
+        let victoryReason = ''; // 胜利原因文字
+        // 跳棋连跳状态：null=不在连跳中，否则是 {row,col} 当前棋子位置（连跳中途）
+        let midJumpPos = null;
+        // AI 模式：'none' | 'red' | 'blue'
+        let aiPlayer = 'none';
+        // 将棋手持棋子: { red: { pieceType: count }, blue: { ... } }
+        let shogiHand = { red: {}, blue: {} };
+        // 将棋当前选中的手持棋子类型（用于打入）
+        let selectedHandPiece = null;
         // sidesSwapped 仅在内部工具函数里用于判断九宫/方向；
         // 现在一律红方在下、黑方在上，所以 sidesSwapped 恒为 false。
         let sidesSwapped = false;
@@ -449,37 +562,70 @@
                 }
             }
 
-            const chessBack = ['rook', 'knight', 'bishop', 'queen', 'king', 'queen', 'bishop', 'knight', 'rook'];
-            const xiangqiBack = ['rook', 'horse', 'elephant', 'advisor', 'king', 'advisor', 'elephant', 'horse', 'rook'];
+            const chessBack = ['chess-rook', 'knight', 'bishop', 'queen', 'chess-king', 'queen', 'bishop', 'knight', 'chess-rook'];
+            const xiangqiBack = ['xiangqi-rook', 'horse', 'elephant', 'advisor', 'xiangqi-king', 'advisor', 'elephant', 'horse', 'xiangqi-rook'];
 
             // 重置围棋储备与被吃计数
             goReserve = { red: 0, blue: 0 };
             goCaptured = { red: 0, blue: 0 };
+            // 重置将棋手持
+            shogiHand = { red: {}, blue: {} };
+
+            // 将棋布局辅助
+            const shogiBackRow = ['shogi-lance', 'shogi-knight', 'shogi-silver', 'shogi-gold', 'shogi-king', 'shogi-gold', 'shogi-silver', 'shogi-knight', 'shogi-lance'];
 
             // 上方阵营（黑方）按其 ruleset 布局
             if (isGo('blue')) {
                 goReserve.blue = GO_RESERVE_TOTAL; // 围棋方开局无棋子，90颗储备
+            } else if (isGomoku('blue')) {
+                goReserve.blue = GOMOKU_RESERVE_TOTAL; // 五子棋方开局无棋子，90颗储备
+            } else if (isCheckers('blue')) {
+                // 跳棋方: 行0-2交替摆放，13颗兵
+                for (let r = 0; r <= 2; r++) {
+                    for (let c = (r % 2 === 0) ? 1 : 0; c < COLS; c += 2) {
+                        b[r][c] = { color: 'blue', type: 'checker-man' };
+                    }
+                }
+            } else if (isShogi('blue')) {
+                for (let c = 0; c < COLS; c++) b[0][c] = { color: 'blue', type: shogiBackRow[c] };
+                b[1][1] = { color: 'blue', type: 'shogi-rook' };
+                b[1][7] = { color: 'blue', type: 'shogi-bishop' };
+                for (let c = 0; c < COLS; c++) b[2][c] = { color: 'blue', type: 'shogi-pawn' };
             } else if (isChess('blue')) {
                 for (let c = 0; c < COLS; c++) b[0][c] = { color: 'blue', type: chessBack[c] };
-                for (let c = 0; c < COLS; c++) b[1][c] = { color: 'blue', type: 'pawn' };
+                for (let c = 0; c < COLS; c++) b[1][c] = { color: 'blue', type: 'chess-pawn' };
             } else {
                 for (let c = 0; c < COLS; c++) b[0][c] = { color: 'blue', type: xiangqiBack[c] };
                 b[2][1] = { color: 'blue', type: 'cannon' };
                 b[2][7] = { color: 'blue', type: 'cannon' };
-                for (let c = 0; c < COLS; c += 2) b[3][c] = { color: 'blue', type: 'pawn' };
+                for (let c = 0; c < COLS; c += 2) b[3][c] = { color: 'blue', type: 'xiangqi-pawn' };
             }
 
             // 下方阵营（红方）按其 ruleset 布局
             if (isGo('red')) {
                 goReserve.red = GO_RESERVE_TOTAL;
+            } else if (isGomoku('red')) {
+                goReserve.red = GOMOKU_RESERVE_TOTAL;
+            } else if (isCheckers('red')) {
+                // 跳棋方: 行7-9交替摆放，13颗兵
+                for (let r = 7; r <= 9; r++) {
+                    for (let c = (r % 2 === 0) ? 1 : 0; c < COLS; c += 2) {
+                        b[r][c] = { color: 'red', type: 'checker-man' };
+                    }
+                }
+            } else if (isShogi('red')) {
+                for (let c = 0; c < COLS; c++) b[7][c] = { color: 'red', type: 'shogi-pawn' };
+                b[8][1] = { color: 'red', type: 'shogi-bishop' };
+                b[8][7] = { color: 'red', type: 'shogi-rook' };
+                for (let c = 0; c < COLS; c++) b[9][c] = { color: 'red', type: shogiBackRow[c] };
             } else if (isChess('red')) {
                 for (let c = 0; c < COLS; c++) b[9][c] = { color: 'red', type: chessBack[c] };
-                for (let c = 0; c < COLS; c++) b[8][c] = { color: 'red', type: 'pawn' };
+                for (let c = 0; c < COLS; c++) b[8][c] = { color: 'red', type: 'chess-pawn' };
             } else {
                 for (let c = 0; c < COLS; c++) b[9][c] = { color: 'red', type: xiangqiBack[c] };
                 b[7][1] = { color: 'red', type: 'cannon' };
                 b[7][7] = { color: 'red', type: 'cannon' };
-                for (let c = 0; c < COLS; c += 2) b[6][c] = { color: 'red', type: 'pawn' };
+                for (let c = 0; c < COLS; c += 2) b[6][c] = { color: 'red', type: 'xiangqi-pawn' };
             }
 
             return b;
@@ -551,7 +697,7 @@
             for (let r = 0; r < ROWS; r++) {
                 for (let c = 0; c < COLS; c++) {
                     const p = b[r][c];
-                    if (p && p.color === color && p.type === 'king') {
+                    if (p && p.color === color && (p.type === 'xiangqi-king' || p.type === 'chess-king' || p.type === 'shogi-king')) {
                         return { row: r, col: c };
                     }
                 }
@@ -568,6 +714,121 @@
                 }
             }
             return n;
+        }
+
+        // ============================================================
+        // 将棋：方向、升变区、手持棋子、打入
+        // ============================================================
+
+        function shogiForward(color) {
+            return sideOfColor(color) === 'bottom' ? -1 : +1;
+        }
+        // 将棋升变区：对方后三行
+        function inShogiPromoZone(color, row) {
+            if (sideOfColor(color) === 'bottom') return row >= 0 && row <= 2;
+            return row >= 7 && row <= 9;
+        }
+        // 移动后是否必须升变（步/香在最后一行，桂在最后两行）
+        function mustShogiPromote(type, color, row) {
+            const lastRow = sideOfColor(color) === 'bottom' ? 0 : 9;
+            const last2 = sideOfColor(color) === 'bottom' ? 1 : 8;
+            if (type === 'shogi-pawn' || type === 'shogi-lance') return row === lastRow;
+            if (type === 'shogi-knight') return row === lastRow || row === last2;
+            return false;
+        }
+        // 升变检查：从 from 到 to，是否可升（仅将棋类型）
+        function canShogiPromote(piece, fromRow, toRow) {
+            if (!piece || piece.promoted) return false; // 已升过
+            if (!SHOGI_NAMES[piece.type]) return false; // 非将棋类型不可升
+            if (piece.type === 'shogi-king' || piece.type === 'shogi-gold') return false; // 不可升
+            // 进入/在升变区内移动/从升变区走出，都可升
+            const color = piece.color;
+            return inShogiPromoZone(color, fromRow) || inShogiPromoZone(color, toRow);
+        }
+        // 自动升变（仅将棋类型）
+        function autoShogiPromote(piece, toRow) {
+            if (!piece || piece.promoted) return;
+            if (!SHOGI_NAMES[piece.type]) return;
+            if (piece.type === 'shogi-king' || piece.type === 'shogi-gold') return;
+            if (mustShogiPromote(piece.type, piece.color, toRow) || inShogiPromoZone(piece.color, toRow)) {
+                piece.promoted = true;
+            }
+        }
+
+        // 手持棋子操作（"混乱之棋"：捕获的棋子保留原类型和走法）
+        function addToHand(color, piece) {
+            const base = shogiBaseType(piece.type);
+            if (!shogiHand[color][base]) shogiHand[color][base] = 0;
+            shogiHand[color][base]++;
+        }
+        function removeFromHand(color, type) {
+            if (shogiHand[color][type] && shogiHand[color][type] > 0) {
+                shogiHand[color][type]--;
+                if (shogiHand[color][type] === 0) delete shogiHand[color][type];
+            }
+        }
+        // 打入合法性校验
+        function canDropShogi(b, color, type, row, col) {
+            if (b[row][col]) return false; // 目标非空
+            // 步/香/桂不能打入到无合法走法的位置
+            if (type === 'shogi-pawn' || type === 'shogi-lance') {
+                if (mustShogiPromote(type, color, row)) return false;
+            }
+            if (type === 'shogi-knight') {
+                const fwd = shogiForward(color);
+                const targets = [[row + fwd * 2, col - 1], [row + fwd * 2, col + 1]];
+                let hasLand = false;
+                for (const [tr, tc] of targets) {
+                    if (inBoard(tr, tc) && !b[tr][tc]) hasLand = true;
+                    else if (inBoard(tr, tc) && b[tr][tc] && b[tr][tc].color !== color) hasLand = true;
+                }
+                if (!hasLand) return false;
+            }
+            // 二步禁手：同一列不能有两个己方未升变步兵
+            if (type === 'shogi-pawn') {
+                for (let r = 0; r < ROWS; r++) {
+                    const p = b[r][col];
+                    if (p && p.color === color && p.type === 'shogi-pawn' && !p.promoted) return false;
+                }
+            }
+            return true;
+        }
+        // 生成某颜色的所有合法打入位置（含王安全校验）
+        function generateShogiDrops(b, color) {
+            const drops = [];
+            const hasKing = findKing(b, color) !== null;
+            for (const type in shogiHand[color]) {
+                if (shogiHand[color][type] <= 0) continue;
+                for (let r = 0; r < ROWS; r++) {
+                    for (let c = 0; c < COLS; c++) {
+                        if (!canDropShogi(b, color, type, r, c)) continue;
+                        if (hasKing) {
+                            const sim = cloneBoard(b);
+                            const isST = SHOGI_NAMES[type] !== undefined;
+                            sim[r][c] = { color, type, promoted: isST && inShogiPromoZone(color, r) && type !== 'shogi-king' && type !== 'shogi-gold' };
+                            if (!isKingSafe(sim, color)) continue;
+                        }
+                        drops.push({ row: r, col: c, dropType: type });
+                    }
+                }
+            }
+            return drops;
+        }
+
+        // 王安全校验（检查color方的王是否受攻）
+        function isKingSafe(b, color) {
+            const king = findKing(b, color);
+            if (!king) return false;
+            const enemy = color === 'red' ? 'blue' : 'red';
+            for (let er = 0; er < ROWS; er++) {
+                for (let ec = 0; ec < COLS; ec++) {
+                    const ep = b[er][ec];
+                    if (!ep || ep.color !== enemy) continue;
+                    const raw = generateRawMoves(b, er, ec, ep);
+                    if (raw.some(m => m.row === king.row && m.col === king.col)) return false;
+                }
+            }
+            return true;
         }
 
         // ============================================================
@@ -617,6 +878,8 @@
         // 返回被提走的棋子列表 [{row,col,piece}]
         function resolveCaptures(b, lastColor) {
             const enemyColor = lastColor === 'red' ? 'blue' : 'red';
+            // 五子棋棋子仅在围棋方参与时参与气/提子机制
+            const goInvolved = isGo(lastColor) || isGo(enemyColor);
             const captured = [];
             const removeGroup = (color) => {
                 const checked = new Set();
@@ -626,6 +889,8 @@
                         if (checked.has(key)) continue;
                         const p = b[r][c];
                         if (p && p.color === color) {
+                            // 五子棋/跳棋棋子：仅在围棋方参与时才参与气/提子
+                            if ((p.type === 'gomoku-stone' || p.type === 'checker-man' || p.type === 'checker-king') && !goInvolved) continue;
                             const grp = findGroup(b, r, c);
                             for (const [gr, gc] of grp) checked.add(gr + ',' + gc);
                             if (countLiberties(b, grp) === 0) {
@@ -701,25 +966,25 @@
             };
 
             switch (type) {
-                case 'king': {
-                    if (isXiangqi(color)) {
-                        // 中国象棋帅/将：九宫内四方向一步
-                        const dirs = [[-1, 0], [1, 0], [0, -1], [0, 1]];
-                        for (const d of dirs) {
-                            const nr = row + d[0], nc = col + d[1];
-                            if (inPalace(color, nr, nc)) addMove(nr, nc);
-                        }
-                    } else {
-                        // 国际象棋王：八方向一步，全盘走
-                        const dirs = [
-                            [-1, -1], [-1, 0], [-1, 1],
-                            [0, -1], [0, 1],
-                            [1, -1], [1, 0], [1, 1]
-                        ];
-                        for (const d of dirs) {
-                            const nr = row + d[0], nc = col + d[1];
-                            if (inBoard(nr, nc)) addMove(nr, nc);
-                        }
+                case 'xiangqi-king': {
+                    // 中国象棋帅/将：九宫内四方向一步
+                    const dirs = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+                    for (const d of dirs) {
+                        const nr = row + d[0], nc = col + d[1];
+                        if (inPalace(color, nr, nc)) addMove(nr, nc);
+                    }
+                    break;
+                }
+                case 'chess-king': {
+                    // 国际象棋王：八方向一步，全盘走
+                    const dirs = [
+                        [-1, -1], [-1, 0], [-1, 1],
+                        [0, -1], [0, 1],
+                        [1, -1], [1, 0], [1, 1]
+                    ];
+                    for (const d of dirs) {
+                        const nr = row + d[0], nc = col + d[1];
+                        if (inBoard(nr, nc)) addMove(nr, nc);
                     }
                     break;
                 }
@@ -775,8 +1040,9 @@
                     break;
                 }
 
-                case 'rook': {
-                    // 车：横竖直线（中国象棋车和国际象棋车走法一致）
+                case 'xiangqi-rook':
+                case 'chess-rook': {
+                    // 车：横竖直线
                     addLinear(0, 1); addLinear(0, -1);
                     addLinear(1, 0); addLinear(-1, 0);
                     break;
@@ -806,38 +1072,39 @@
                     break;
                 }
 
-                case 'pawn': {
-                    if (isXiangqi(color)) {
-                        // 中国象棋兵/卒：向前一步，过河后可横走
-                        const forward = pawnForward(color);
-                        const isCrossed = xiangqiPawnCrossed(color, row);
-                        const nr = row + forward;
-                        if (inBoard(nr, col)) addMove(nr, col);
-                        if (isCrossed) {
-                            if (inBoard(row, col - 1)) addMove(row, col - 1);
-                            if (inBoard(row, col + 1)) addMove(row, col + 1);
-                        }
-                    } else {
-                        // 国际象棋兵：向前走，斜吃；起始位置可两格
-                        const forward = pawnForward(color);
-                        const nr = row + forward;
-                        if (inBoard(nr, col) && !b[nr][col]) {
-                            moves.push({ row: nr, col: col });
-                            if (row === chessPawnStartRow(color)) {
-                                const nr2 = row + 2 * forward;
-                                if (inBoard(nr2, col) && !b[nr2][col]) {
-                                    moves.push({ row: nr2, col: col });
-                                }
+                case 'xiangqi-pawn': {
+                    // 中国象棋兵/卒：向前一步，过河后可横走
+                    const forward = pawnForward(color);
+                    const isCrossed = xiangqiPawnCrossed(color, row);
+                    const nr = row + forward;
+                    if (inBoard(nr, col)) addMove(nr, col);
+                    if (isCrossed) {
+                        if (inBoard(row, col - 1)) addMove(row, col - 1);
+                        if (inBoard(row, col + 1)) addMove(row, col + 1);
+                    }
+                    break;
+                }
+                case 'chess-pawn': {
+                    // 国际象棋兵：向前走，斜吃；起始位置可两格
+                    const forward = pawnForward(color);
+                    const nr = row + forward;
+                    if (inBoard(nr, col) && !b[nr][col]) {
+                        moves.push({ row: nr, col: col });
+                        if (row === chessPawnStartRow(color)) {
+                            const nr2 = row + 2 * forward;
+                            if (inBoard(nr2, col) && !b[nr2][col]) {
+                                moves.push({ row: nr2, col: col });
                             }
                         }
-                        for (const dc of [-1, 1]) {
-                            const nc = col + dc;
-                            if (inBoard(nr, nc)) {
-                                const target = b[nr][nc];
-                                if (target && target.color !== color) {
-                                    moves.push({ row: nr, col: nc });
-                                }
+                    }
+                    for (const dc of [-1, 1]) {
+                        const nc = col + dc;
+                        if (inBoard(nr, nc)) {
+                            const target = b[nr][nc];
+                            if (target && target.color !== color) {
+                                moves.push({ row: nr, col: nc });
                             }
+                            // En passant（简化）
                         }
                     }
                     break;
@@ -918,6 +1185,133 @@
                     break;
                 }
 
+                // 国际跳棋 - 兵（只能斜前走，斜前跳吃）
+                case 'checker-man': {
+                    const forward = color === 'red' ? -1 : 1; // 红在上走(减行)，黑在下走(增行)
+                    const dirs = [[forward, -1], [forward, 1]];
+                    for (const [dr, dc] of dirs) {
+                        // 普通斜走一格
+                        const nr = row + dr, nc = col + dc;
+                        if (inBoard(nr, nc) && !b[nr][nc]) {
+                            moves.push({ row: nr, col: nc });
+                        }
+                        // 跳吃：隔一格有敌子，再隔一格为空
+                        const jr = row + dr * 2, jc = col + dc * 2;
+                        const mr = row + dr, mc = col + dc;
+                        if (inBoard(jr, jc) && b[mr] && b[mr][mc] && b[mr][mc].color !== color && !b[jr][jc]) {
+                            moves.push({ row: jr, col: jc, isJump: true });
+                        }
+                    }
+                    break;
+                }
+
+                // 国际跳棋 - 王（四斜向任意格，单颗跳吃后继续跳）
+                case 'checker-king': {
+                    const kingDirs = [[-1, -1], [-1, 1], [1, -1], [1, 1]];
+                    for (const [dr, dc] of kingDirs) {
+                        let r = row + dr, c = col + dc;
+                        // 普通斜走：沿对角线走到空位
+                        while (inBoard(r, c) && !b[r][c]) {
+                            moves.push({ row: r, col: c });
+                            r += dr;
+                            c += dc;
+                        }
+                        // 跳吃：遇到敌子后，跳过一格必须为空
+                        if (inBoard(r, c) && b[r][c] && b[r][c].color !== color) {
+                            const jr = r + dr, jc = c + dc;
+                            if (inBoard(jr, jc) && !b[jr][jc]) {
+                                moves.push({ row: jr, col: jc, isJump: true });
+                            }
+                        }
+                    }
+                    break;
+                }
+
+                // ---- 将棋棋子 ----
+                case 'shogi-king': {
+                    // 八方一格（同国际象棋王）
+                    const dirs = [[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]];
+                    for (const [dr, dc] of dirs) addMove(row + dr, col + dc);
+                    break;
+                }
+                case 'shogi-gold': {
+                    // 六方向：前/后/左/右/前左斜/前右斜
+                    const fwd = shogiForward(color);
+                    const dirs = [[fwd, 0], [-fwd, 0], [0, -1], [0, 1], [fwd, -1], [fwd, 1]];
+                    for (const [dr, dc] of dirs) addMove(row + dr, col + dc);
+                    break;
+                }
+                case 'shogi-silver': {
+                    if (piece.promoted) {
+                        // 成银 = 金将
+                        const fwd = shogiForward(color);
+                        const dirs = [[fwd, 0], [-fwd, 0], [0, -1], [0, 1], [fwd, -1], [fwd, 1]];
+                        for (const [dr, dc] of dirs) addMove(row + dr, col + dc);
+                    } else {
+                        // 五方向：前/前左斜/前右斜/后左斜/后右斜
+                        const fwd = shogiForward(color);
+                        const dirs = [[fwd, 0], [fwd, -1], [fwd, 1], [-fwd, -1], [-fwd, 1]];
+                        for (const [dr, dc] of dirs) addMove(row + dr, col + dc);
+                    }
+                    break;
+                }
+                case 'shogi-knight': {
+                    if (piece.promoted) {
+                        const fwd = shogiForward(color);
+                        const dirs = [[fwd, 0], [-fwd, 0], [0, -1], [0, 1], [fwd, -1], [fwd, 1]];
+                        for (const [dr, dc] of dirs) addMove(row + dr, col + dc);
+                    } else {
+                        // 向前跳两格+左右一格（仅两个位置）
+                        const fwd = shogiForward(color);
+                        addMove(row + fwd * 2, col - 1);
+                        addMove(row + fwd * 2, col + 1);
+                    }
+                    break;
+                }
+                case 'shogi-lance': {
+                    if (piece.promoted) {
+                        const fwd = shogiForward(color);
+                        const dirs = [[fwd, 0], [-fwd, 0], [0, -1], [0, 1], [fwd, -1], [fwd, 1]];
+                        for (const [dr, dc] of dirs) addMove(row + dr, col + dc);
+                    } else {
+                        // 只能向前走任意格
+                        const fwd = shogiForward(color);
+                        addLinear(fwd, 0);
+                    }
+                    break;
+                }
+                case 'shogi-pawn': {
+                    if (piece.promoted) {
+                        const fwd = shogiForward(color);
+                        const dirs = [[fwd, 0], [-fwd, 0], [0, -1], [0, 1], [fwd, -1], [fwd, 1]];
+                        for (const [dr, dc] of dirs) addMove(row + dr, col + dc);
+                    } else {
+                        // 向前一格
+                        addMove(row + shogiForward(color), col);
+                    }
+                    break;
+                }
+                case 'shogi-rook': {
+                    if (piece.promoted) {
+                        // 龍王 = 车 + 四斜一格
+                        addLinear(0, 1); addLinear(0, -1); addLinear(1, 0); addLinear(-1, 0);
+                        for (const [dr, dc] of [[-1,-1],[-1,1],[1,-1],[1,1]]) addMove(row + dr, col + dc);
+                    } else {
+                        addLinear(0, 1); addLinear(0, -1); addLinear(1, 0); addLinear(-1, 0);
+                    }
+                    break;
+                }
+                case 'shogi-bishop': {
+                    if (piece.promoted) {
+                        // 龍馬 = 象 + 四正一格
+                        addLinear(1, 1); addLinear(1, -1); addLinear(-1, 1); addLinear(-1, -1);
+                        for (const [dr, dc] of [[-1,0],[1,0],[0,-1],[0,1]]) addMove(row + dr, col + dc);
+                    } else {
+                        addLinear(1, 1); addLinear(1, -1); addLinear(-1, 1); addLinear(-1, -1);
+                    }
+                    break;
+                }
+
                 default:
                     break;
             }
@@ -925,11 +1319,29 @@
             return moves;
         }
 
+        // 检查当前局面 color 方的王是否被将军
+        function isKingInCheck(b, color) {
+            const king = findKing(b, color);
+            if (!king) return false;
+            const enemy = color === 'red' ? 'blue' : 'red';
+            for (let er = 0; er < ROWS; er++) {
+                for (let ec = 0; ec < COLS; ec++) {
+                    const ep = b[er][ec];
+                    if (!ep || ep.color !== enemy) continue;
+                    const raw = generateRawMoves(b, er, ec, ep);
+                    if (raw.some(m => m.row === king.row && m.col === king.col)) return true;
+                }
+            }
+            return false;
+        }
+
         // 检查走一步后，己方王是否会被吃（合法性检查）
         function isMoveLegal(b, fromRow, fromCol, toRow, toCol, color) {
+            // 无王规则体系（跳棋、围棋、五子棋）不检查王安全
+            if (isGo(color) || isGomoku(color) || isCheckers(color)) return true;
+
             // 模拟走子
             const testBoard = cloneBoard(b);
-            const captured = testBoard[toRow][toCol];
             testBoard[toRow][toCol] = testBoard[fromRow][fromCol];
             testBoard[fromRow][fromCol] = null;
 
@@ -985,18 +1397,19 @@
             return legal;
         }
 
-        // 检查某方是否已败（将死/困毙/围棋方被吃光）
+        // 检查某方是否已败（将死/困毙/围棋方被吃光/五子棋方耗尽）
         function checkGameOver(b, color) {
-            // 围棋方：检查是否被吃光（盘上无go-stone + 储备空）
-            if (isGo(color)) {
+            // 围棋方 / 五子棋方：检查是否耗尽（盘上无自己的落子型棋子 + 储备空）
+            if (isGo(color) || isGomoku(color)) {
+                const stoneType = isGo(color) ? 'go-stone' : 'gomoku-stone';
                 let stones = 0;
                 for (let r = 0; r < ROWS; r++)
                     for (let c = 0; c < COLS; c++)
-                        if (b[r][c] && b[r][c].color === color && b[r][c].type === 'go-stone') stones++;
+                        if (b[r][c] && b[r][c].color === color && b[r][c].type === stoneType) stones++;
                 if (stones === 0 && goReserve[color] === 0) return true;
-                return false; // 围棋方只要有子或还有储备就不算输
+                return false; // 只要有子或还有储备就不算输
             }
-            // 象棋方：检查是否有合法走法（将死/困毙）
+            // 象棋方 / 跳棋方：检查是否有合法走法（将死/困毙/堵死）
             for (let r = 0; r < ROWS; r++) {
                 for (let c = 0; c < COLS; c++) {
                     const p = b[r][c];
@@ -1006,16 +1419,46 @@
                     }
                 }
             }
+            // 将棋方还需检查是否有合法打入
+            if (isShogi(color) && generateShogiDrops(b, color).length > 0) return false;
             return true;
         }
 
         // 检查围棋方是否已围死对方帅/王（围棋方胜利条件）
         function checkGoWin(b, goColor) {
             const enemyColor = goColor === 'red' ? 'blue' : 'red';
-            // 围棋vs围棋：双方都无帅/王，只能靠吃光对方所有棋子取胜
-            if (isGo(enemyColor)) return false;
+            // 对方无帅/王(围棋/五子棋)时，不走围杀判定
+            if (isGo(enemyColor) || isGomoku(enemyColor) || isCheckers(enemyColor)) return false;
             const king = findKing(b, enemyColor);
             return !king; // 对方帅/王不在棋盘上=被提走=围棋方赢
+        }
+
+        // 检查五子棋方是否连成五子（横/竖/正斜/反斜）
+        function checkGomokuWin(b, color) {
+            const dirs = [
+                [0, 1],   // 横
+                [1, 0],   // 竖
+                [1, 1],   // 正斜
+                [1, -1]   // 反斜
+            ];
+            for (let r = 0; r < ROWS; r++) {
+                for (let c = 0; c < COLS; c++) {
+                    const p = b[r][c];
+                    if (!p || p.color !== color || p.type !== 'gomoku-stone') continue;
+                    for (const [dr, dc] of dirs) {
+                        let count = 1;
+                        for (let i = 1; i < 5; i++) {
+                            const nr = r + dr * i, nc = c + dc * i;
+                            if (!inBoard(nr, nc)) break;
+                            const np = b[nr][nc];
+                            if (!np || np.color !== color || np.type !== 'gomoku-stone') break;
+                            count++;
+                        }
+                        if (count >= 5) return true;
+                    }
+                }
+            }
+            return false;
         }
 
         // 检查围棋方是否还有合法落子位置（非自杀）
@@ -1029,31 +1472,67 @@
             return false;
         }
 
+        // 跳棋方是否有任何棋子可以跳吃
+        function checkersHasAnyJump(b, color) {
+            for (let r = 0; r < ROWS; r++) {
+                for (let c = 0; c < COLS; c++) {
+                    const p = b[r][c];
+                    if (p && p.color === color && isCheckers(color)) {
+                        const raw = generateRawMoves(b, r, c);
+                        if (raw.some(m => m.isJump)) return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        // 跳棋方是否有任何棋子可以走（跳吃或普通）
+        function checkersHasAnyMove(b, color) {
+            for (let r = 0; r < ROWS; r++) {
+                for (let c = 0; c < COLS; c++) {
+                    const p = b[r][c];
+                    if (p && p.color === color && isCheckers(color)) {
+                        const moves = getLegalMoves(b, r, c);
+                        if (moves.length > 0) return true;
+                    }
+                }
+            }
+            return false;
+        }
+
         // ============================================================
         // 游戏逻辑
         // ============================================================
 
         function switchTurn() {
             currentTurn = currentTurn === 'red' ? 'blue' : 'red';
+            selectedHandPiece = null; // 清将棋手持选中
             updateTurnUI();
 
             // 围棋方胜利检查：对方帅/王是否被围死提走
             const prevColor = currentTurn === 'red' ? 'blue' : 'red';
             if (isGo(prevColor) && checkGoWin(board, prevColor)) {
-                gameOver = true;
-                winner = prevColor;
-                const name = (winner === 'red' ? '红方' : '黑方') + `（${rulesetName(winner)}）`;
-                statusBar.innerHTML = `🏆 <span class="highlight">${name}</span> 围死对方主帅，获胜！`;
+                showVictory(prevColor, '围死对方主帅');
+                return true;
+            }
+
+            // 五子棋方连五检查
+            if (isGomoku(prevColor) && checkGomokuWin(board, prevColor)) {
+                showVictory(prevColor, '连成五子');
+                return true;
+            }
+            // 将棋方通过打入的五子棋连五也能获胜
+            if (isShogi(prevColor) && checkGomokuWin(board, prevColor)) {
+                showVictory(prevColor, '借五子之力连珠');
                 return true;
             }
 
             // 检查游戏是否结束
             if (checkGameOver(board, currentTurn)) {
-                gameOver = true;
-                winner = currentTurn === 'red' ? 'blue' : 'red';
-                const name = (winner === 'red' ? '红方' : '黑方') + `（${rulesetName(winner)}）`;
-                const reason = isGo(currentTurn) ? '围棋方棋子被吃光' : '将死/困毙';
-                statusBar.innerHTML = `🏆 <span class="highlight">${name}</span> 获胜！${reason} · 点击「新局」重新开始`;
+                const loserColor = currentTurn;
+                const winColor = loserColor === 'red' ? 'blue' : 'red';
+                const reason = isGo(loserColor) ? '围棋方棋子被吃光' : (isGomoku(loserColor) ? '五子棋方棋子耗尽' : '将死/困毙');
+                showVictory(winColor, reason);
                 return true;
             }
 
@@ -1064,6 +1543,42 @@
                     return switchTurn(); // 递归切换给对方
                 }
                 statusBar.textContent = `${currentTurn === 'red' ? '红方' : '黑方'}（围棋）落子 · 剩余${goReserve[currentTurn]}颗`;
+                triggerAI();
+                return false;
+            }
+
+            // 五子棋方自动pass：储备空
+            if (isGomoku(currentTurn)) {
+                if (goReserve[currentTurn] <= 0) {
+                    statusBar.textContent = `${currentTurn === 'red' ? '红方' : '黑方'}（五子棋）储备已空，跳过`;
+                    return switchTurn();
+                }
+                statusBar.textContent = `${currentTurn === 'red' ? '红方' : '黑方'}（五子棋）落子 · 剩余${goReserve[currentTurn]}颗`;
+                triggerAI();
+                return false;
+            }
+
+            // 将棋方：更新手持显示 + 触AI
+            if (isShogi(currentTurn)) {
+                const inCheck = isKingInCheck(board, currentTurn);
+                if (inCheck) {
+                    statusBar.textContent = `${currentTurn === 'red' ? '红方' : '黑方'}（将棋）将军！走棋或打入`;
+                } else {
+                    statusBar.textContent = `${currentTurn === 'red' ? '红方' : '黑方'}（将棋）走棋或打入`;
+                }
+                triggerAI();
+                return false;
+            }
+
+            // 跳棋方自动pass：无合法走法（被堵死）
+            if (isCheckers(currentTurn)) {
+                if (!checkersHasAnyMove(board, currentTurn)) {
+                    statusBar.textContent = `${currentTurn === 'red' ? '红方' : '黑方'}（跳棋）无合法走法，跳过`;
+                    return switchTurn();
+                }
+                const hasJump = checkersHasAnyJump(board, currentTurn);
+                statusBar.textContent = `${currentTurn === 'red' ? '红方' : '黑方'}（跳棋）${hasJump ? '必须跳吃' : '走棋'}`;
+                triggerAI();
                 return false;
             }
 
@@ -1094,7 +1609,100 @@
                     statusBar.textContent = `${currentTurn === 'red' ? '红方' : '黑方'} 走棋`;
                 }
             }
+            triggerAI();
             return false;
+        }
+
+        // 跳棋选择棋子（处理强制跳吃逻辑）
+        function selectCheckersPiece(row, col, piece, hasJump) {
+            const rawMoves = generateRawMoves(board, row, col);
+            if (hasJump) {
+                // 有跳吃时只能跳
+                const jumps = rawMoves.filter(m => m.isJump);
+                if (jumps.length === 0) {
+                    statusBar.textContent = '必须跳吃！该棋子无法跳吃';
+                    return;
+                }
+                validMoves = jumps;
+            } else {
+                validMoves = rawMoves;
+            }
+            selectedPos = { row, col };
+            midJumpPos = null;
+            drawBoard();
+            const typeName = piece.type === 'checker-king' ? '王' : '兵';
+            statusBar.textContent = `已选择 ${currentTurn === 'red' ? '红' : '黑'}${typeName}，点击高亮位置${hasJump ? '跳吃' : '移动'}`;
+        }
+
+        // 跳棋执行跳吃/移动（含升变、连跳检测）
+        function executeCheckersJump(fromRow, fromCol, toRow, toCol) {
+            const piece = board[fromRow][fromCol];
+            if (!piece) return;
+
+            // 判断是否跳吃：斜走>1格即跳吃
+            const rowDiff = Math.abs(toRow - fromRow);
+            const isJump = rowDiff > 1;
+
+            // 执行移动
+            board[toRow][toCol] = piece;
+            board[fromRow][fromCol] = null;
+
+            // 如果是跳吃，移除被跳过的中间棋子
+            if (isJump) {
+                const dr = (toRow - fromRow) / rowDiff; // 每步方向
+                const dc = (toCol - fromCol) / rowDiff;
+                // 被跳过的敌子（在from和to之间最近的一个敌子）
+                let mr = fromRow + dr, mc = fromCol + dc;
+                let jumpedPiece = null;
+                for (let step = 1; step < rowDiff; step++) {
+                    if (board[mr] && board[mr][mc] && board[mr][mc].color !== piece.color) {
+                        jumpedPiece = board[mr][mc];
+                        board[mr][mc] = null;
+                        break;
+                    }
+                    mr += dr;
+                    mc += dc;
+                }
+            }
+
+            // 升变：兵到底线
+            if (piece.type === 'checker-man') {
+                const promoteRow = piece.color === 'red' ? 0 : 9;
+                if (toRow === promoteRow) {
+                    board[toRow][toCol] = { color: piece.color, type: 'checker-king' };
+                }
+            }
+
+            selectedPos = null;
+            validMoves = [];
+            drawBoard();
+
+            // 跳吃后检查能否继续跳（连跳）
+            if (isJump) {
+                const contMoves = generateRawMoves(board, toRow, toCol).filter(m => m.isJump);
+                if (contMoves.length > 0) {
+                    // 必须继续跳
+                    midJumpPos = { row: toRow, col: toCol };
+                    validMoves = contMoves;
+                    drawBoard();
+                    const typeName = board[toRow][toCol].type === 'checker-king' ? '王' : '兵';
+                    statusBar.textContent = `连跳！${currentTurn === 'red' ? '红' : '黑'}${typeName}继续跳吃`;
+                    return;
+                }
+            }
+
+            midJumpPos = null;
+            // 触发提子
+            const caps = resolveCaptures(board, piece.color);
+
+            const over = switchTurn();
+            if (!over) {
+                drawBoard();
+                if (statusBar.textContent.indexOf('获胜') === -1) {
+                    statusBar.textContent = `${currentTurn === 'red' ? '红方' : '黑方'} 走棋`;
+                }
+            }
+            drawBoard();
         }
 
         function makeMove(fromRow, fromCol, toRow, toCol) {
@@ -1112,8 +1720,17 @@
             board[toRow][toCol] = piece;
             board[fromRow][fromCol] = null;
 
+            // 将棋吃子进手持
+            if (isShogi(piece.color) && captured) {
+                addToHand(piece.color, captured);
+            }
+            // 将棋自动升变
+            if (isShogi(piece.color)) {
+                autoShogiPromote(board[toRow][toCol], toRow);
+            }
+
             // 国际象棋兵升变（任意一方，只要用国际象棋规则，兵到达对侧底线即升变为后）
-            if (isChess(piece.color) && piece.type === 'pawn' && toRow === chessPawnPromoteRow(piece.color)) {
+            if (isChess(piece.color) && piece.type === 'chess-pawn' && toRow === chessPawnPromoteRow(piece.color)) {
                 board[toRow][toCol] = { color: piece.color, type: 'queen' };
                 const cn = piece.color === 'red' ? '红方' : '黑方';
                 statusBar.textContent = `${cn}兵升变为后！`;
@@ -1123,6 +1740,7 @@
             const caps = resolveCaptures(board, piece.color);
             for (const cap of caps) {
                 if (cap.piece.type === 'go-stone') goCaptured[cap.piece.color]++;
+                if (cap.piece.type === 'gomoku-stone') goCaptured[cap.piece.color]++;
             }
 
             selectedPos = null;
@@ -1139,6 +1757,53 @@
             }
             drawBoard();
             return true;
+        }
+
+        // 五子棋方落子
+        function placeGomokuStone(row, col) {
+            const color = currentTurn;
+            board[row][col] = { color, type: 'gomoku-stone' };
+            goReserve[color]--;
+
+            // 触发提子（仅在围棋方参与时生效，resolveCaptures 内部处理）
+            const caps = resolveCaptures(board, color);
+            for (const cap of caps) {
+                if (cap.piece.type === 'go-stone') goCaptured[cap.piece.color]++;
+                if (cap.piece.type === 'gomoku-stone') goCaptured[cap.piece.color]++;
+            }
+
+            const cn = color === 'red' ? '红方' : '黑方';
+            const reserveInfo = `（剩余${goReserve[color]}颗）`;
+            if (caps.length > 0) {
+                statusBar.textContent = `${cn}（五子棋）落子${reserveInfo}，提走${caps.length}颗棋子`;
+            } else {
+                statusBar.textContent = `${cn}（五子棋）落子${reserveInfo}`;
+            }
+
+            selectedPos = null;
+            validMoves = [];
+            drawBoard();
+
+            // 储备用完时立即检查：连五则胜，否则败
+            if (goReserve[color] <= 0) {
+                if (checkGomokuWin(board, color)) {
+                    showVictory(color, '连成五子');
+                    return;
+                } else {
+                    const winColor = color === 'red' ? 'blue' : 'red';
+                    showVictory(winColor, '五子棋方90颗用完未连五');
+                    return;
+                }
+            }
+
+            const over = switchTurn();
+            if (!over) {
+                drawBoard();
+                if (statusBar.textContent.indexOf('将军') === -1 && statusBar.textContent.indexOf('获胜') === -1) {
+                    statusBar.textContent = `${currentTurn === 'red' ? '红方' : '黑方'} 走棋`;
+                }
+            }
+            drawBoard();
         }
 
         // 围棋方落子
@@ -1175,31 +1840,521 @@
             drawBoard();
         }
 
+        // 统一胜利显示
+        function showVictory(winnerColor, reason) {
+            gameOver = true;
+            winner = winnerColor;
+            victoryReason = reason;
+            const colorName = winnerColor === 'red' ? '红方' : '黑方';
+            const ruleset = rulesetName(winnerColor);
+            statusBar.textContent = `${colorName}（${ruleset}）获胜 —— ${reason}`;
+            statusBar.classList.add('victory');
+            drawBoard();
+        }
+
         function resetGame() {
             board = createInitialBoard();
             currentTurn = 'red'; // 红方永远先手
             selectedPos = null;
             validMoves = [];
             moveHistory = [];
+            midJumpPos = null;
             gameOver = false;
             winner = null;
+            victoryReason = '';
+            selectedHandPiece = null;
+            statusBar.classList.remove('victory');
             updateTurnUI();
             const first = `红方（${rulesetName('red')}）`;
             const second = `黑方（${rulesetName('blue')}）`;
             statusBar.textContent = `新局！${first}先手 vs ${second}后手 · 点击棋子查看走法`;
             drawBoard();
+            // 如果红方是 AI，自动走第一步
+            if (aiPlayer === 'red') triggerAI();
+        }
+
+        // ============================================================
+        // AI 人机对弈
+        // ============================================================
+
+        // 棋子价值表（AI 评估用）
+        const AI_VALUE = {
+            'xiangqi-king': 10000, 'chess-king': 10000, queen: 900,
+            'xiangqi-rook': 500, 'chess-rook': 500, cannon: 450,
+            bishop: 330, elephant: 330, knight: 320, horse: 320,
+            'xiangqi-pawn': 100, 'chess-pawn': 100,
+            'go-stone': 50, 'gomoku-stone': 80,
+            'checker-man': 100, 'checker-king': 300,
+            // 将棋
+            'shogi-king': 10000, 'shogi-rook': 500, 'shogi-bishop': 450,
+            'shogi-gold': 350, 'shogi-silver': 300, 'shogi-knight': 250,
+            'shogi-lance': 200, 'shogi-pawn': 100
+        };
+        // 将棋AI升变价值增益
+        const SHOGI_PROMO_BONUS = {
+            'shogi-rook': 100, 'shogi-bishop': 100,
+            'shogi-silver': 50, 'shogi-knight': 50,
+            'shogi-lance': 50, 'shogi-pawn': 50
+        };
+
+        function isAITurn() {
+            return !gameOver && aiPlayer !== 'none' && aiPlayer === currentTurn;
+        }
+
+        function triggerAI() {
+            if (!isAITurn()) return;
+            setTimeout(() => {
+                if (!isAITurn() || gameOver) return;
+                const color = currentTurn;
+                const ruleset = getRuleset(color);
+
+                if (ruleset === 'go') aiGoMove(color);
+                else if (ruleset === 'gomoku') aiGomokuMove(color);
+                else if (ruleset === 'checkers') aiCheckersMove(color);
+                else if (ruleset === 'shogi') aiShogiMove(color);
+                else aiChessMove(color); // xiangqi / chess
+
+                drawBoard();
+                // 跳棋连跳时 AI 继续走（midJumpPos 不为 null 且还是 AI 回合）
+                if (midJumpPos && isAITurn()) triggerAI();
+            }, 250);
+        }
+
+        // 局面评估：己方总价值 - 对方总价值
+        function evaluateBoard(b, color) {
+            const enemy = color === 'red' ? 'blue' : 'red';
+            let score = 0;
+            for (let r = 0; r < ROWS; r++) {
+                for (let c = 0; c < COLS; c++) {
+                    const p = b[r][c];
+                    if (!p) continue;
+                    const val = AI_VALUE[p.type] || 50;
+                    score += (p.color === color ? val : -val);
+                }
+            }
+            return score;
+        }
+
+        // ---- 象棋 / 国际象棋 AI ----
+        function aiChessMove(color) {
+            const allMoves = [];
+            for (let r = 0; r < ROWS; r++) {
+                for (let c = 0; c < COLS; c++) {
+                    const p = board[r][c];
+                    if (p && p.color === color) {
+                        const moves = getLegalMoves(board, r, c);
+                        for (const m of moves) {
+                            allMoves.push({ fromR: r, fromC: c, toR: m.row, toC: m.col });
+                        }
+                    }
+                }
+            }
+            if (allMoves.length === 0) return;
+
+            let bestScore = -Infinity;
+            let bestMoves = [];
+            for (const mv of allMoves) {
+                const testBoard = cloneBoard(board);
+                const captured = testBoard[mv.toR][mv.toC];
+                testBoard[mv.toR][mv.toC] = testBoard[mv.fromR][mv.fromC];
+                testBoard[mv.fromR][mv.fromC] = null;
+
+                let score = evaluateBoard(testBoard, color);
+                if (captured) score += (AI_VALUE[captured.type] || 100) * 1.5;
+                // 偏向中央
+                score += (4 - Math.abs(mv.toC - 4)) * 3;
+                score += Math.random() * 15;
+
+                if (score > bestScore) {
+                    bestScore = score;
+                    bestMoves = [mv];
+                } else if (Math.abs(score - bestScore) < 15) {
+                    bestMoves.push(mv);
+                }
+            }
+            const chosen = bestMoves[Math.floor(Math.random() * bestMoves.length)];
+            makeMove(chosen.fromR, chosen.fromC, chosen.toR, chosen.toC);
+        }
+
+        // ---- 围棋 AI ----
+        function aiGoMove(color) {
+            if (goReserve[color] <= 0) return;
+            const enemy = color === 'red' ? 'blue' : 'red';
+            let bestScore = -Infinity;
+            let bestMoves = [];
+
+            for (let r = 0; r < ROWS; r++) {
+                for (let c = 0; c < COLS; c++) {
+                    if (board[r][c]) continue;
+                    if (isGoSuicide(board, r, c, color)) continue;
+
+                    let score = 0;
+                    // 靠近中央
+                    score += (4 - Math.abs(r - 4.5)) * 5 + (4 - Math.abs(c - 4)) * 5;
+                    // 靠近敌子（进攻）
+                    for (const [dr, dc] of DIRS4) {
+                        const nr = r + dr, nc = c + dc;
+                        if (inBoard(nr, nc) && board[nr][nc] && board[nr][nc].color === enemy) score += 35;
+                        if (inBoard(nr, nc) && board[nr][nc] && board[nr][nc].color === color) score += 18;
+                    }
+                    // 能提子加分
+                    const testBoard = cloneBoard(board);
+                    testBoard[r][c] = { color, type: 'go-stone' };
+                    const caps = resolveCaptures(testBoard, color);
+                    score += caps.length * 70;
+                    score += Math.random() * 20;
+
+                    if (score > bestScore) {
+                        bestScore = score;
+                        bestMoves = [{ r, c }];
+                    } else if (Math.abs(score - bestScore) < 10) {
+                        bestMoves.push({ r, c });
+                    }
+                }
+            }
+            if (bestMoves.length === 0) return;
+            const chosen = bestMoves[Math.floor(Math.random() * bestMoves.length)];
+            placeGoStone(chosen.r, chosen.c);
+        }
+
+        // ---- 五子棋 AI ----
+        function aiGomokuMove(color) {
+            if (goReserve[color] <= 0) return;
+            const enemy = color === 'red' ? 'blue' : 'red';
+            const dirs = [[0, 1], [1, 0], [1, 1], [1, -1]];
+            let bestScore = -Infinity;
+            let bestMoves = [];
+
+            for (let r = 0; r < ROWS; r++) {
+                for (let c = 0; c < COLS; c++) {
+                    if (board[r][c]) continue;
+
+                    // 攻防综合评分
+                    const testBoard = cloneBoard(board);
+                    testBoard[r][c] = { color, type: 'gomoku-stone' };
+                    let score = gomokuLineScore(testBoard, r, c, color, dirs) * 1.3;
+                    // 防：假设此处下敌方棋子
+                    testBoard[r][c] = { color: enemy, type: 'gomoku-stone' };
+                    score += gomokuLineScore(testBoard, r, c, enemy, dirs);
+
+                    score += (4 - Math.abs(r - 4.5)) * 3;
+                    score += Math.random() * 15;
+
+                    if (score > bestScore) {
+                        bestScore = score;
+                        bestMoves = [{ r, c }];
+                    } else if (Math.abs(score - bestScore) < 10) {
+                        bestMoves.push({ r, c });
+                    }
+                }
+            }
+            if (bestMoves.length === 0) return;
+            const chosen = bestMoves[Math.floor(Math.random() * bestMoves.length)];
+            placeGomokuStone(chosen.r, chosen.c);
+        }
+
+        // 五子棋方向线评分：连子越长分越高，开放端越多分越高
+        function gomokuLineScore(b, row, col, color, dirs) {
+            let score = 0;
+            for (const [dr, dc] of dirs) {
+                let count = 1, openEnds = 0;
+                // 正向
+                for (let i = 1; i <= 4; i++) {
+                    const nr = row + dr * i, nc = col + dc * i;
+                    if (!inBoard(nr, nc)) break;
+                    const p = b[nr][nc];
+                    if (p && p.color === color && p.type === 'gomoku-stone') count++;
+                    else { if (!p) openEnds++; break; }
+                }
+                // 反向
+                for (let i = 1; i <= 4; i++) {
+                    const nr = row - dr * i, nc = col - dc * i;
+                    if (!inBoard(nr, nc)) break;
+                    const p = b[nr][nc];
+                    if (p && p.color === color && p.type === 'gomoku-stone') count++;
+                    else { if (!p) openEnds++; break; }
+                }
+                if (count >= 5) score += 10000;
+                else if (count === 4 && openEnds === 2) score += 5000;
+                else if (count === 4 && openEnds === 1) score += 1200;
+                else if (count === 3 && openEnds === 2) score += 600;
+                else if (count === 3 && openEnds === 1) score += 200;
+                else if (count === 2 && openEnds === 2) score += 80;
+            }
+            return score;
+        }
+
+        // ---- 国际跳棋 AI ----
+        function aiCheckersMove(color) {
+            // 连跳中途：从 midJumpPos 继续跳
+            if (midJumpPos) {
+                const contMoves = generateRawMoves(board, midJumpPos.row, midJumpPos.col).filter(m => m.isJump);
+                if (contMoves.length === 0) return;
+                const chosen = contMoves[Math.floor(Math.random() * contMoves.length)];
+                validMoves = contMoves;
+                executeCheckersJump(midJumpPos.row, midJumpPos.col, chosen.row, chosen.col);
+                return;
+            }
+
+            const hasJump = checkersHasAnyJump(board, color);
+            const allMoves = [];
+            for (let r = 0; r < ROWS; r++) {
+                for (let c = 0; c < COLS; c++) {
+                    const p = board[r][c];
+                    if (p && p.color === color) {
+                        let raw = generateRawMoves(board, r, c);
+                        if (hasJump) raw = raw.filter(m => m.isJump);
+                        for (const m of raw) {
+                            allMoves.push({ fromR: r, fromC: c, toR: m.row, toC: m.col, isJump: !!m.isJump });
+                        }
+                    }
+                }
+            }
+            if (allMoves.length === 0) return;
+
+            let bestScore = -Infinity;
+            let bestMoves = [];
+            const forward = color === 'red' ? -1 : 1;
+            const promoteRow = color === 'red' ? 0 : 9;
+
+            for (const mv of allMoves) {
+                let score = 0;
+                const piece = board[mv.fromR][mv.fromC];
+
+                if (mv.isJump) score += 600;          // 跳吃优先
+                if (piece.type === 'checker-man') {
+                    // 前进得分
+                    if (forward * (mv.toR - mv.fromR) < 0) score += 35;
+                    // 靠近升变线
+                    score += (9 - Math.abs(mv.toR - promoteRow)) * 6;
+                }
+                // 安全检查：落点不会被反吃
+                let safe = true;
+                const enemy = color === 'red' ? 'blue' : 'red';
+                for (const [dr, dc] of [[-1, -1], [-1, 1], [1, -1], [1, 1]]) {
+                    const nr = mv.toR + dr, nc = mv.toC + dc;
+                    const jr = mv.toR - dr, jc = mv.toC - dc;
+                    if (inBoard(nr, nc) && inBoard(jr, jc) && board[nr][nc] && board[nr][nc].color === enemy && !board[jr][jc]) {
+                        safe = false;
+                    }
+                }
+                if (safe) score += 25;
+                score += (4 - Math.abs(mv.toC - 4)) * 2;
+                score += Math.random() * 20;
+
+                if (score > bestScore) {
+                    bestScore = score;
+                    bestMoves = [mv];
+                } else if (Math.abs(score - bestScore) < 25) {
+                    bestMoves.push(mv);
+                }
+            }
+            const chosen = bestMoves[Math.floor(Math.random() * bestMoves.length)];
+            executeCheckersJump(chosen.fromR, chosen.fromC, chosen.toR, chosen.toC);
+        }
+
+        // ---- 将棋 AI ----
+        function aiShogiMove(color) {
+            const allMoves = [];
+            // 1) 棋盘棋子走法
+            for (let r = 0; r < ROWS; r++) {
+                for (let c = 0; c < COLS; c++) {
+                    const p = board[r][c];
+                    if (p && p.color === color) {
+                        const moves = getLegalMoves(board, r, c);
+                        for (const m of moves) {
+                            allMoves.push({ fromR: r, fromC: c, toR: m.row, toC: m.col, drop: false, dropType: null });
+                        }
+                    }
+                }
+            }
+            // 2) 手持棋子打入
+            const drops = generateShogiDrops(board, color);
+            for (const d of drops) {
+                allMoves.push({ fromR: -1, fromC: -1, toR: d.row, toC: d.col, drop: true, dropType: d.dropType });
+            }
+
+            if (allMoves.length === 0) return;
+
+            let bestScore = -Infinity;
+            let bestMoves = [];
+
+            for (const mv of allMoves) {
+                const sim = cloneBoard(board);
+                // 保存手持快照（不可变，仅用于恢复）
+                const handSaved = {};
+                for (const t in shogiHand[color]) handSaved[t] = shogiHand[color][t];
+                // 模拟手持（可变副本）
+                const handSim = {};
+                for (const t in shogiHand[color]) handSim[t] = shogiHand[color][t];
+
+                if (mv.drop) {
+                    // 模拟打入
+                    if (handSim[mv.dropType]) {
+                        handSim[mv.dropType]--;
+                        if (handSim[mv.dropType] === 0) delete handSim[mv.dropType];
+                    }
+                    const isShogiType = SHOGI_NAMES[mv.dropType] !== undefined;
+                    sim[mv.toR][mv.toC] = { color, type: mv.dropType, promoted: isShogiType && inShogiPromoZone(color, mv.toR) && mv.dropType !== 'shogi-king' && mv.dropType !== 'shogi-gold' };
+                } else {
+                    // 模拟走子
+                    const captured = sim[mv.toR][mv.toC];
+                    sim[mv.toR][mv.toC] = sim[mv.fromR][mv.fromC];
+                    sim[mv.fromR][mv.fromC] = null;
+                    // 升变
+                    const piece = sim[mv.toR][mv.toC];
+                    if (canShogiPromote(sim[mv.toR][mv.toC], mv.fromR, mv.toR)) {
+                        sim[mv.toR][mv.toC] = { ...piece, promoted: true };
+                    }
+                    // 模拟吃子进手持
+                    if (captured) {
+                        const base = shogiBaseType(captured.type);
+                        if (!handSim[base]) handSim[base] = 0;
+                        handSim[base]++;
+                    }
+                }
+
+                // 评估
+                let score = evaluateBoard(sim, color);
+                // 手持棋子价值（按半价估算）
+                for (const t in handSim) {
+                    const val = AI_VALUE[t] || 50;
+                    const bonus = (mv.drop && mv.dropType === t) ? 0 : val * 0.5;
+                    if (handSim[t] > 0) score += bonus * handSim[t];
+                }
+                // 打入额外奖励（落子靠近中央/敌方）
+                if (mv.drop) {
+                    score += (4 - Math.abs(mv.toC - 4)) * 3;
+                    score += (mv.toR >= 5 ? (9 - mv.toR) : mv.toR) * 2; // 偏中间行
+                }
+                score += Math.random() * 20;
+
+                // 恢复手持（从不可变快照）
+                for (const t in shogiHand[color]) {
+                    if (!(t in handSaved)) delete shogiHand[color][t];
+                }
+                for (const t in handSaved) {
+                    shogiHand[color][t] = handSaved[t];
+                }
+
+                if (score > bestScore) {
+                    bestScore = score;
+                    bestMoves = [mv];
+                } else if (Math.abs(score - bestScore) < 25) {
+                    bestMoves.push(mv);
+                }
+            }
+
+            const chosen = bestMoves[Math.floor(Math.random() * bestMoves.length)];
+            if (chosen.drop) {
+                executeShogiDrop(chosen.toR, chosen.toC, chosen.dropType);
+            } else {
+                makeMove(chosen.fromR, chosen.fromC, chosen.toR, chosen.toC);
+            }
+        }
+
+        function updateShogiHandUI() {
+            const area = document.getElementById('shogiHandArea');
+            const color = currentTurn;
+            const hand = shogiHand[color] || {};
+            const entries = Object.entries(hand).filter(([, c]) => c > 0);
+            if (!isShogi(color) || entries.length === 0) {
+                area.classList.remove('visible');
+                area.innerHTML = '';
+                return;
+            }
+            area.classList.add('visible');
+            area.innerHTML = entries.map(([type, count]) => {
+                const name = shogiHandDisplayName(type);
+                const sel = (selectedHandPiece === type) ? ' selected' : '';
+                return `<span class="shogi-hand-piece${sel}" data-type="${type}">${name}<span class="hand-count">${count}</span></span>`;
+            }).join('');
+            // 绑定点击事件
+            area.querySelectorAll('.shogi-hand-piece').forEach(el => {
+                el.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    if (gameOver) return;
+                    const t = el.dataset.type;
+                    if (selectedHandPiece === t) {
+                        selectedHandPiece = null;
+                        selectedPos = null;
+                        validMoves = [];
+                    } else {
+                        selectedHandPiece = t;
+                        selectedPos = null;
+                        validMoves = generateShogiDrops(board, currentTurn).filter(d => d.dropType === t);
+                    }
+                    updateShogiHandUI();
+                    drawBoard();
+                    if (selectedHandPiece) {
+                        statusBar.textContent = `打入「${SHOGI_NAMES[selectedHandPiece]}」· 点击空位放置`;
+                    } else {
+                        statusBar.textContent = `${currentTurn === 'red' ? '红方' : '黑方'}（将棋）走棋或打入`;
+                    }
+                });
+            });
+        }
+
+        function getShogiPieceName(piece) {
+            if (!piece) return '';
+            if (piece.promoted) return SHOGI_PROMOTED_NAMES[piece.type] || SHOGI_NAMES[piece.type] || piece.type;
+            return SHOGI_NAMES[piece.type] || piece.type;
+        }
+        // 手持棋子显示名（包括非将棋类型）
+        function shogiHandDisplayName(type) {
+            if (SHOGI_NAMES[type]) return SHOGI_NAMES[type];
+            if (XIANGQI_NAMES_RED[type]) return XIANGQI_NAMES_RED[type];
+            if (CHESS_SYMBOLS[type]) return CHESS_SYMBOLS[type];
+            if (type === 'go-stone') return '围';
+            if (type === 'gomoku-stone') return '五';
+            return type;
+        }
+
+        function executeShogiDrop(row, col, type) {
+            const color = currentTurn;
+            removeFromHand(color, type);
+            // 围棋/五子棋属于放置类棋子，无移动能力
+            const isStone = type === 'go-stone' || type === 'gomoku-stone';
+            const isShogiType = !isStone && SHOGI_NAMES[type] !== undefined;
+            board[row][col] = { color, type, promoted: false };
+            // 打入自动升变（仅将棋类型）
+            if (isShogiType && inShogiPromoZone(color, row) && type !== 'shogi-king' && type !== 'shogi-gold') {
+                board[row][col].promoted = true;
+            }
+            moveHistory.push({ drop: true, row, col, type, color });
+            selectedHandPiece = null;
+            selectedPos = null;
+            validMoves = [];
+            drawBoard();
+            // 放置类棋子触发气/提子
+            resolveCaptures(board, color);
+            const over = switchTurn();
+            if (!over) {
+                drawBoard();
+                if (isStone) {
+                    statusBar.textContent = `${color === 'red' ? '红方' : '黑方'} 放置${type === 'go-stone' ? '围棋子' : '五子棋子'} · 将棋走棋或打入`;
+                } else {
+                    statusBar.textContent = `${color === 'red' ? '红方' : '黑方'}（将棋）走棋或打入`;
+                }
+            }
         }
 
         function updateTurnUI() {
             turnLabel.textContent = currentTurn === 'red' ? '红方走' : '黑方走';
             turnDot.className = 'turn-dot ' + currentTurn;
-            // 围棋方剩余储备子数显示
+            // 围棋方 / 五子棋方剩余储备子数显示
             const parts = [];
             if (isGo('red') && goReserve.red > 0) {
                 parts.push(`<span class="reserve-dot red"></span>红方围棋剩余 <b>${goReserve.red}</b> 颗`);
             }
+            if (isGomoku('red') && goReserve.red > 0) {
+                parts.push(`<span class="reserve-dot red"></span>红方五子棋剩余 <b>${goReserve.red}</b> 颗`);
+            }
             if (isGo('blue') && goReserve.blue > 0) {
                 parts.push(`<span class="reserve-dot blue"></span>黑方围棋剩余 <b>${goReserve.blue}</b> 颗`);
+            }
+            if (isGomoku('blue') && goReserve.blue > 0) {
+                parts.push(`<span class="reserve-dot blue"></span>黑方五子棋剩余 <b>${goReserve.blue}</b> 颗`);
             }
             if (parts.length > 0) {
                 goReserveInfo.innerHTML = parts.join('　');
@@ -1208,22 +2363,26 @@
                 goReserveInfo.classList.remove('visible');
                 goReserveInfo.innerHTML = '';
             }
+            updateShogiHandUI();
         }
 
         // ===== 配置面板交互 =====
         const configMask = document.getElementById('configMask');
         const redSel = document.getElementById('redRuleset');
         const blueSel = document.getElementById('blueRuleset');
+        const aiSel = document.getElementById('aiSelect');
 
         function openConfig() {
             redSel.value = config.rulesets.red;
             blueSel.value = config.rulesets.blue;
+            aiSel.value = aiPlayer;
             configMask.classList.remove('hidden');
         }
         function closeConfig() { configMask.classList.add('hidden'); }
         function startFromConfig() {
             config.rulesets.red = redSel.value;
             config.rulesets.blue = blueSel.value;
+            aiPlayer = aiSel.value;
             closeConfig();
             resetGame();
         }
@@ -1261,6 +2420,128 @@
                     return;
                 }
                 placeGoStone(row, col);
+                return;
+            }
+
+            // 五子棋方：点击空位落子
+            if (isGomoku(currentTurn)) {
+                if (board[row][col]) {
+                    statusBar.textContent = '该位置已有棋子';
+                    return;
+                }
+                if (goReserve[currentTurn] <= 0) {
+                    statusBar.textContent = '五子棋方储备已空，自动跳过';
+                    return;
+                }
+                placeGomokuStone(row, col);
+                return;
+            }
+
+            // 跳棋方：连跳中途继续跳
+            if (isCheckers(currentTurn) && midJumpPos) {
+                const isTarget = validMoves.some(m => m.row === row && m.col === col);
+                if (!isTarget) {
+                    statusBar.textContent = '必须继续跳吃，点击高亮位置';
+                    return;
+                }
+                executeCheckersJump(midJumpPos.row, midJumpPos.col, row, col);
+                return;
+            }
+
+            // 跳棋方：正常走棋
+            if (isCheckers(currentTurn)) {
+                const piece = board[row][col];
+                const hasJump = checkersHasAnyJump(board, currentTurn);
+
+                // 已选中棋子
+                if (selectedPos) {
+                    const isTarget = validMoves.some(m => m.row === row && m.col === col);
+                    if (isTarget) {
+                        executeCheckersJump(selectedPos.row, selectedPos.col, row, col);
+                        return;
+                    }
+                    // 换选自己的其他棋子
+                    if (piece && piece.color === currentTurn) {
+                        selectCheckersPiece(row, col, piece, hasJump);
+                        return;
+                    }
+                    // 取消选择
+                    selectedPos = null;
+                    validMoves = [];
+                    midJumpPos = null;
+                    drawBoard();
+                    statusBar.textContent = hasJump ? `${currentTurn === 'red' ? '红方' : '黑方'}（跳棋）必须跳吃` : `${currentTurn === 'red' ? '红方' : '黑方'}（跳棋）走棋`;
+                    return;
+                }
+
+                // 选中己方棋子
+                if (piece && piece.color === currentTurn) {
+                    selectCheckersPiece(row, col, piece, hasJump);
+                    return;
+                }
+                statusBar.textContent = hasJump ? `必须跳吃！请选择能跳吃的棋子` : `请选择 ${currentTurn === 'red' ? '红方' : '黑方'} 棋子`;
+                return;
+            }
+
+            // ---- 将棋方：手持棋子打入 (点击空位) ----
+            if (isShogi(currentTurn) && selectedHandPiece) {
+                if (!board[row][col]) {
+                    const dropTarget = validMoves.find(m => m.row === row && m.col === col);
+                    if (dropTarget) {
+                        executeShogiDrop(row, col, selectedHandPiece);
+                        return;
+                    }
+                    statusBar.textContent = '此处不可打入，请选其他空位';
+                    return;
+                }
+                // 点击己方棋子 -> 切换为棋盘棋子
+                if (board[row][col].color === currentTurn) {
+                    selectedHandPiece = null;
+                    updateShogiHandUI();
+                    selectedPos = { row, col };
+                    validMoves = getLegalMoves(board, row, col);
+                    drawBoard();
+                    return;
+                }
+                // 点击对方棋子 -> 取消
+                selectedHandPiece = null;
+                updateShogiHandUI();
+                validMoves = [];
+                drawBoard();
+                return;
+            }
+
+            // ---- 将棋方：普通走棋 (已选中棋盘棋子) ----
+            if (isShogi(currentTurn) && selectedPos) {
+                const isTarget = validMoves.some(m => m.row === row && m.col === col);
+                if (isTarget) {
+                    makeMove(selectedPos.row, selectedPos.col, row, col);
+                    return;
+                }
+                if (board[row][col] && board[row][col].color === currentTurn) {
+                    selectedPos = { row, col };
+                    validMoves = getLegalMoves(board, row, col);
+                    drawBoard();
+                    return;
+                }
+                selectedPos = null;
+                selectedHandPiece = null;
+                updateShogiHandUI();
+                validMoves = [];
+                drawBoard();
+                return;
+            }
+
+            // ---- 将棋方：无选中 -> 选棋盘棋子 ----
+            if (isShogi(currentTurn)) {
+                if (board[row][col] && board[row][col].color === currentTurn) {
+                    selectedHandPiece = null;
+                    updateShogiHandUI();
+                    selectedPos = { row, col };
+                    validMoves = getLegalMoves(board, row, col);
+                    drawBoard();
+                    return;
+                }
                 return;
             }
 
@@ -1460,30 +2741,9 @@
             ctx.fillText('楚  河', margin + 2 * cellSize, midY);
             ctx.fillText('汉  界', margin + 6 * cellSize, midY);
 
-            // 兵/炮位标记 (小十字)：根据双方 ruleset 决定位置
-            const marks = [];
-            // 下方阵营（红方）
-            if (isXiangqi('red')) {
-                for (let c = 0; c < COLS; c += 2) marks.push({ r: 6, c });
-                marks.push({ r: 7, c: 1 }, { r: 7, c: 7 });
-            } else {
-                for (let c = 0; c < COLS; c++) marks.push({ r: 8, c });
-            }
-            // 上方阵营（黑方）
-            if (isXiangqi('blue')) {
-                for (let c = 0; c < COLS; c += 2) marks.push({ r: 3, c });
-                marks.push({ r: 2, c: 1 }, { r: 2, c: 7 });
-            } else {
-                for (let c = 0; c < COLS; c++) marks.push({ r: 1, c });
-            }
-            const markSize = cellSize * 0.12;
-            for (const m of marks) {
-                const pos = getPos(m.r, m.c);
-                drawCross(pos.x, pos.y, markSize);
-            }
-
             // 绘制所有棋子
             for (let r = 0; r < ROWS; r++) {
+                if (!board[r]) continue;
                 for (let c = 0; c < COLS; c++) {
                     const piece = board[r][c];
                     if (piece) {
@@ -1533,15 +2793,94 @@
             }
 
             // 游戏结束遮罩
-            if (gameOver) {
-                ctx.fillStyle = 'rgba(0,0,0,0.3)';
+            if (gameOver && winner) {
+                // 半透明遮罩
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.65)';
                 ctx.fillRect(0, 0, w, h);
-                ctx.fillStyle = '#ffd700';
-                ctx.font = `bold ${cellSize * 0.8}px "PingFang SC", "Microsoft YaHei", sans-serif`;
+
+                // 胜利面板
+                const panelW = cellSize * 6.5;
+                const panelH = cellSize * 3.8;
+                const panelX = (w - panelW) / 2;
+                const panelY = (h - panelH) / 2;
+                const panelR = cellSize * 0.4;
+
+                // 面板背景（带圆角）
+                ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+                ctx.shadowBlur = 20;
+                ctx.shadowOffsetX = 0;
+                ctx.shadowOffsetY = 4;
+                const panelGrad = ctx.createLinearGradient(panelX, panelY, panelX, panelY + panelH);
+                panelGrad.addColorStop(0, winner === 'red' ? '#6b2020' : '#2a2a3a');
+                panelGrad.addColorStop(1, winner === 'red' ? '#3a1010' : '#12121e');
+                ctx.fillStyle = panelGrad;
+                ctx.beginPath();
+                ctx.moveTo(panelX + panelR, panelY);
+                ctx.lineTo(panelX + panelW - panelR, panelY);
+                ctx.arcTo(panelX + panelW, panelY, panelX + panelW, panelY + panelR, panelR);
+                ctx.lineTo(panelX + panelW, panelY + panelH - panelR);
+                ctx.arcTo(panelX + panelW, panelY + panelH, panelX + panelW - panelR, panelY + panelH, panelR);
+                ctx.lineTo(panelX + panelR, panelY + panelH);
+                ctx.arcTo(panelX, panelY + panelH, panelX, panelY + panelH - panelR, panelR);
+                ctx.lineTo(panelX, panelY + panelR);
+                ctx.arcTo(panelX, panelY, panelX + panelR, panelY, panelR);
+                ctx.closePath();
+                ctx.fill();
+
+                // 面板边框
+                ctx.shadowBlur = 0;
+                ctx.strokeStyle = winner === 'red' ? '#e84040' : '#6688cc';
+                ctx.lineWidth = 2.5;
+                ctx.stroke();
+
+                // 内边框
+                ctx.strokeStyle = 'rgba(255, 215, 0, 0.4)';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(panelX + panelR + 8, panelY + 8);
+                ctx.lineTo(panelX + panelW - panelR - 8, panelY + 8);
+                ctx.arcTo(panelX + panelW - 8, panelY + 8, panelX + panelW - 8, panelY + panelR + 8, panelR - 8);
+                ctx.lineTo(panelX + panelW - 8, panelY + panelH - panelR - 8);
+                ctx.arcTo(panelX + panelW - 8, panelY + panelH - 8, panelX + panelW - panelR - 8, panelY + panelH - 8, panelR - 8);
+                ctx.lineTo(panelX + panelR + 8, panelY + panelH - 8);
+                ctx.arcTo(panelX + 8, panelY + panelH - 8, panelX + 8, panelY + panelH - panelR - 8, panelR - 8);
+                ctx.lineTo(panelX + 8, panelY + panelR + 8);
+                ctx.arcTo(panelX + 8, panelY + 8, panelX + panelR + 8, panelY + 8, panelR - 8);
+                ctx.closePath();
+                ctx.stroke();
+
+                // 冠军奖杯
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
-                const winnerName = (winner === 'red' ? '红方' : '黑方') + `（${rulesetName(winner)}）`;
-                ctx.fillText(`🏆 ${winnerName} 获胜`, w / 2, h / 2);
+                ctx.font = `${cellSize * 1.0}px "Segoe UI Symbol", "Apple Color Emoji", sans-serif`;
+                ctx.fillStyle = '#ffd700';
+                ctx.fillText('🏆', panelX + panelW / 2, panelY + cellSize * 0.7);
+
+                // 胜利标题
+                const colorName = winner === 'red' ? '红方' : '黑方';
+                ctx.font = `bold ${cellSize * 0.55}px "PingFang SC", "Microsoft YaHei", sans-serif`;
+                ctx.fillStyle = '#ffd700';
+                ctx.fillText(`${colorName}获胜`, panelX + panelW / 2, panelY + cellSize * 1.5);
+
+                // 规则体系
+                ctx.font = `${cellSize * 0.35}px "PingFang SC", "Microsoft YaHei", sans-serif`;
+                ctx.fillStyle = winner === 'red' ? '#f0a0a0' : '#a0b8e0';
+                ctx.fillText(rulesetName(winner), panelX + panelW / 2, panelY + cellSize * 2.05);
+
+                // 胜利原因
+                ctx.font = `${cellSize * 0.4}px "PingFang SC", "Microsoft YaHei", sans-serif`;
+                ctx.fillStyle = '#f0e0c0';
+                ctx.fillText(victoryReason, panelX + panelW / 2, panelY + cellSize * 2.6);
+
+                // 底部提示
+                ctx.font = `${cellSize * 0.3}px "PingFang SC", "Microsoft YaHei", sans-serif`;
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+                ctx.fillText('点击「新局」重新开始', panelX + panelW / 2, panelY + cellSize * 3.2);
+
+                // 重置阴影
+                ctx.shadowBlur = 0;
+                ctx.shadowOffsetX = 0;
+                ctx.shadowOffsetY = 0;
             }
         }
 
@@ -1617,6 +2956,49 @@
                 return;
             }
 
+            // 五子棋子：画实心圆 + 小十字标记，区分于围棋
+            if (piece.type === 'gomoku-stone') {
+                ctx.shadowColor = 'rgba(0,0,0,0.4)';
+                ctx.shadowBlur = 5;
+                ctx.shadowOffsetX = 1;
+                ctx.shadowOffsetY = 2;
+                const grad = ctx.createRadialGradient(x - radius * 0.3, y - radius * 0.3, radius * 0.1, x, y, radius);
+                if (isRed) {
+                    grad.addColorStop(0, '#ffb0a0');
+                    grad.addColorStop(0.6, '#e06040');
+                    grad.addColorStop(1, '#801800');
+                } else {
+                    grad.addColorStop(0, '#707080');
+                    grad.addColorStop(0.6, '#202030');
+                    grad.addColorStop(1, '#000008');
+                }
+                ctx.beginPath();
+                ctx.arc(x, y, radius, 0, Math.PI * 2);
+                ctx.fillStyle = grad;
+                ctx.fill();
+                ctx.shadowBlur = 0;
+                ctx.shadowOffsetX = 0;
+                ctx.shadowOffsetY = 0;
+                ctx.strokeStyle = isRed ? 'rgba(255,200,150,0.7)' : 'rgba(150,150,180,0.7)';
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.arc(x, y, radius, 0, Math.PI * 2);
+                ctx.stroke();
+                // 小十字标记（五子棋特色）
+                const cs = radius * 0.3;
+                ctx.strokeStyle = isRed ? 'rgba(255,220,200,0.5)' : 'rgba(200,200,220,0.5)';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(x - cs, y);
+                ctx.lineTo(x + cs, y);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(x, y - cs);
+                ctx.lineTo(x, y + cs);
+                ctx.stroke();
+                return;
+            }
+
             // 阴影
             ctx.shadowColor = 'rgba(0,0,0,0.3)';
             ctx.shadowBlur = 6;
@@ -1663,8 +3045,18 @@
             let text = '';
             let fontSize = radius * 0.75;
 
-            const useXiangqi = isXiangqi(isRed ? 'red' : 'blue');
-            if (useXiangqi) {
+            const isShogiPiece = piece.type && piece.type.startsWith('shogi-');
+            const isXiangqiPiece = piece.type && piece.type.startsWith('xiangqi-') || ['advisor', 'elephant', 'horse', 'cannon'].includes(piece.type);
+            if (isShogiPiece) {
+                // 将棋：用汉字显示，升变后换字
+                text = piece.promoted ? (SHOGI_PROMOTED_NAMES[piece.type] || SHOGI_NAMES[piece.type] || piece.type) : (SHOGI_NAMES[piece.type] || piece.type);
+                fontSize = radius * 0.7;
+                ctx.fillStyle = isRed ? '#ffeedd' : '#f0f0f0';
+                ctx.shadowColor = isRed ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.3)';
+                ctx.shadowBlur = 4;
+                ctx.shadowOffsetX = 1;
+                ctx.shadowOffsetY = 1;
+            } else if (isXiangqiPiece) {
                 text = (isRed ? XIANGQI_NAMES_RED : XIANGQI_NAMES_BLUE)[piece.type] || piece.type;
                 ctx.fillStyle = isRed ? '#ffeedd' : '#f0f0f0';
                 ctx.shadowColor = isRed ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.3)';
@@ -1688,12 +3080,13 @@
                 ctx.shadowOffsetY = 1;
             }
 
-            ctx.font = `bold ${fontSize}px "PingFang SC", "Microsoft YaHei", "Segoe UI Symbol", "Arial Unicode MS", sans-serif`;
             // 对于国际象棋Unicode符号，使用更大的字体
-            if (!useXiangqi && text.length === 1 && text.charCodeAt(0) > 0x2600) {
+            if (!isXiangqiPiece && !isShogiPiece && text.length === 1 && text.charCodeAt(0) > 0x2600) {
                 ctx.font = `bold ${fontSize * 1.1}px "Segoe UI Symbol", "Arial Unicode MS", sans-serif`;
+            } else {
+                ctx.font = `bold ${fontSize}px "PingFang SC", "Microsoft YaHei", "Segoe UI Symbol", "Arial Unicode MS", sans-serif`;
             }
-            ctx.fillText(text, x, y + (useXiangqi ? 1 : 0));
+            ctx.fillText(text, x, y + (isXiangqiPiece ? 1 : 0));
 
             // 重置阴影
             ctx.shadowBlur = 0;
