@@ -513,6 +513,7 @@
                     <option value="gomoku">五子棋</option>
                     <option value="checkers">国际跳棋</option>
                     <option value="shogi">将棋</option>
+                    <option value="tetris">俄罗斯方块</option>
                 </select>
             </div>
             <div class="config-row">
@@ -524,6 +525,7 @@
                     <option value="gomoku">五子棋</option>
                     <option value="checkers">国际跳棋</option>
                     <option value="shogi">将棋</option>
+                    <option value="tetris">俄罗斯方块</option>
                 </select>
             </div>
             <div class="config-row">
@@ -579,6 +581,7 @@
                         <option value="gomoku">五子棋</option>
                         <option value="checkers">国际跳棋</option>
                         <option value="shogi">将棋</option>
+                        <option value="tetris">俄罗斯方块</option>
                     </select>
                 </div>
             </div>
@@ -1008,6 +1011,13 @@
             getDisplayName(color) { return '♕'; }
         });
 
+        // 俄罗斯方块棋子
+        definePiece('tetris-block', {
+            ruleset: 'tetris', category: 'stone', value: 50,
+            getMoves() { return []; },
+            getDisplayName(color) { return '■'; }
+        });
+
         // ============================================================
         // 注册表查询接口
         // ============================================================
@@ -1061,6 +1071,7 @@
         function isGomoku(color) { return getRuleset(color) === 'gomoku'; }
         function isCheckers(color) { return getRuleset(color) === 'checkers'; }
         function isShogi(color) { return getRuleset(color) === 'shogi'; }
+        function isTetris(color) { return getRuleset(color) === 'tetris'; }
         function rulesetName(color) {
             const r = getRuleset(color);
             if (r === 'xiangqi') return '中国象棋';
@@ -1069,6 +1080,7 @@
             if (r === 'gomoku') return '五子棋';
             if (r === 'checkers') return '国际跳棋';
             if (r === 'shogi') return '将棋';
+            if (r === 'tetris') return '俄罗斯方块';
             return r;
         }
 
@@ -1146,6 +1158,8 @@
                 goReserve.blue = GO_RESERVE_TOTAL; // 围棋方开局无棋子，90颗储备
             } else if (isGomoku('blue')) {
                 goReserve.blue = GOMOKU_RESERVE_TOTAL; // 五子棋方开局无棋子，90颗储备
+            } else if (isTetris('blue')) {
+                // 俄罗斯方块无开局棋子
             } else if (isCheckers('blue')) {
                 // 跳棋方: 行0-2交替摆放，13颗兵
                 for (let r = 0; r <= 2; r++) {
@@ -1306,6 +1320,13 @@
                         for (let c = 0; c < COLS; c++)
                             if (b[r][c] && b[r][c].color === color && getLegalMoves(b, r, c).length > 0) return null;
                     return '跳棋方无子可走';
+                },
+                checkVictory() { return null; }
+            },
+            tetris: {
+                name: '俄罗斯方块',
+                checkDefeat(b, color) {
+                    return tetrisDefeated ? '方块超界不可放置' : null;
                 },
                 checkVictory() { return null; }
             }
@@ -1685,6 +1706,223 @@
         }
 
         // ============================================================
+        // 俄罗斯方块系统（仅黑方可选）
+        // ============================================================
+        // 七种标准方块形状（SRS 相对坐标）
+        const TETROMINO_SHAPES = {
+            I: { cells: [[0,0],[0,1],[0,2],[0,3]] },
+            O: { cells: [[0,0],[0,1],[1,0],[1,1]] },
+            T: { cells: [[0,0],[0,1],[0,2],[1,1]] },
+            S: { cells: [[0,1],[0,2],[1,0],[1,1]] },
+            Z: { cells: [[0,0],[0,1],[1,1],[1,2]] },
+            J: { cells: [[0,0],[1,0],[1,1],[1,2]] },
+            L: { cells: [[0,2],[1,0],[1,1],[1,2]] }
+        };
+        const TETROMINO_KEYS = ['I','O','T','S','Z','J','L'];
+        const TETRIS_COLORS = ['#00e5ff', '#ffea00', '#d500f9', '#76ff03', '#ff9100', '#2979ff', '#00c853'];
+        const TETRIS_FALL_INTERVAL = 500; // ms，自动下落间隔
+        const TETRIS_SPEED_INTERVAL = 50;  // ms，加速下落间隔
+
+        // 俄罗斯方块状态
+        let tetrisState = {
+            active: false,        // 是否正在下落
+            pieceType: null,      // 'I'|'O'|... 当前方块类型
+            cells: [],            // 当前方块各格在棋盘上的绝对坐标 [[r,c],...]
+            color: '#00e5ff',     // 当前方块颜色
+            fallTimer: null,      // 下落计时器ID
+            defeated: false       // 是否已失败（方块超界）
+        };
+        let tetrisDefeated = false; // 暴露给 RULESETS.tetris.checkDefeat
+
+        // 获取方块在指定位置的绝对坐标
+        function tetrisAbsCells(shapeKey, row, col) {
+            return TETROMINO_SHAPES[shapeKey].cells.map(([r,c]) => [row + r, col + c]);
+        }
+
+        // 检查方块指定位置是否碰撞
+        function tetrisCollides(cells) {
+            for (const [r, c] of cells) {
+                if (r < 0 || r >= ROWS || c < 0 || c >= COLS) return true;
+                if (board[r][c]) return true;
+            }
+            return false;
+        }
+
+        // 尝试旋转（以当前方块中心为轴，含墙踢）
+        function tetrisTryRotate() {
+            const shapeKey = tetrisState.pieceType;
+            if (!shapeKey || shapeKey === 'O') return;
+            const cells = tetrisState.cells;
+            // 计算当前四格方块的中心
+            let sumR = 0, sumC = 0;
+            for (const [r, c] of cells) { sumR += r; sumC += c; }
+            const cr = Math.round(sumR / cells.length);
+            const cc = Math.round(sumC / cells.length);
+            // 每格绕中心顺时针旋转90°: (r,c) → (cr + (c-cc), cc - (r-cr))
+            const rotated = cells.map(([r, c]) => [cr + (c - cc), cc - (r - cr)]);
+            // 墙踢
+            const kicks = [[0,0], [-1,0], [1,0], [0,-1], [0,1], [-2,0], [2,0]];
+            for (const [dr, dc] of kicks) {
+                const kicked = rotated.map(([r, c]) => [r + dr, c + dc]);
+                if (!tetrisCollides(kicked)) {
+                    tetrisState.cells = kicked;
+                    return;
+                }
+            }
+        }
+
+        // 尝试左移
+        function tetrisMoveLeft() {
+            const moved = tetrisState.cells.map(([r,c]) => [r, c - 1]);
+            if (!tetrisCollides(moved)) tetrisState.cells = moved;
+        }
+
+        // 尝试右移
+        function tetrisMoveRight() {
+            const moved = tetrisState.cells.map(([r,c]) => [r, c + 1]);
+            if (!tetrisCollides(moved)) tetrisState.cells = moved;
+        }
+
+        // 尝试下移（返回false=锁定）
+        function tetrisMoveDown() {
+            const moved = tetrisState.cells.map(([r,c]) => [r + 1, c]);
+            if (tetrisCollides(moved)) {
+                tetrisLock();
+                return false;
+            }
+            tetrisState.cells = moved;
+            return true;
+        }
+
+        // 硬降到底
+        function tetrisHardDrop() {
+            while (true) {
+                const moved = tetrisState.cells.map(([r,c]) => [r + 1, c]);
+                if (tetrisCollides(moved)) break;
+                tetrisState.cells = moved;
+            }
+            tetrisLock();
+        }
+
+        // 锁定方块：变为棋盘上独立tetris-block棋子
+        function tetrisLock() {
+            for (const [r, c] of tetrisState.cells) {
+                board[r][c] = { color: 'blue', type: 'tetris-block', blockColor: tetrisState.color };
+            }
+            // 消行
+            tetrisClearLines();
+            // 清理状态
+            tetrisStopFall();
+            tetrisState.active = false;
+            tetrisState.cells = [];
+            drawBoard();
+            // 切换到红方
+            const over = switchTurn();
+            if (!over) {
+                drawBoard();
+                statusBar.textContent = `${currentTurn === 'red' ? '红方' : '黑方'} 走棋`;
+            }
+        }
+
+        // 消行：整行全满即清，上方所有棋子下移
+        function tetrisClearLines() {
+            let r = ROWS - 1;
+            while (r >= 0) {
+                let full = true;
+                for (let c = 0; c < COLS; c++) {
+                    if (!board[r][c]) { full = false; break; }
+                }
+                if (full) {
+                    // 必须至少包含一个 tetris-block 才能触发消行
+                    let hasTetris = false;
+                    for (let c = 0; c < COLS; c++) {
+                        if (board[r][c] && board[r][c].type === 'tetris-block') { hasTetris = true; break; }
+                    }
+                    if (!hasTetris) { r--; continue; }
+                    for (let rr = r; rr > 0; rr--)
+                        for (let c = 0; c < COLS; c++)
+                            board[rr][c] = board[rr - 1][c];
+                    for (let c = 0; c < COLS; c++) board[0][c] = null;
+                    // r不变，新掉下来的行需要再检查
+                } else {
+                    r--;
+                }
+            }
+        }
+
+        // 停止下落计时器
+        function tetrisStopFall() {
+            if (tetrisState.fallTimer) {
+                clearInterval(tetrisState.fallTimer);
+                tetrisState.fallTimer = null;
+            }
+        }
+
+        // 生成随机方块并开始下落
+        function tetrisStartTurn() {
+            tetrisState.active = true;
+            tetrisDefeated = false;
+            const shapeKey = TETROMINO_KEYS[Math.floor(Math.random() * TETROMINO_KEYS.length)];
+            tetrisState.pieceType = shapeKey;
+            // 在顶部中间生成
+            const spawnCol = Math.floor((COLS - 1) / 2);
+            tetrisState.cells = tetrisAbsCells(shapeKey, 0, spawnCol);
+            tetrisState.color = TETRIS_COLORS[Math.floor(Math.random() * TETRIS_COLORS.length)];
+
+            // 检查出生即碰撞 → 失败
+            if (tetrisCollides(tetrisState.cells)) {
+                tetrisState.cells = [];
+                tetrisState.active = false;
+                tetrisDefeated = true;
+                const winColor = currentTurn === 'red' ? 'blue' : 'red'; // 虽然说是黑方输，但实际是 currentTurn = blue
+                // currentTurn 还未切换，黑方刚轮到自己就输了
+                showVictory('red', '方块超界不可放置');
+                return;
+            }
+
+            statusBar.textContent = '黑方（俄罗斯方块）放置方块 · 点击四象限或键盘控制';
+            drawBoard();
+            // 启动下落
+            tetrisState.fallTimer = setInterval(() => {
+                if (!tetrisState.active) { tetrisStopFall(); return; }
+                tetrisMoveDown();
+                if (tetrisState.active) drawBoard();
+            }, TETRIS_FALL_INTERVAL);
+        }
+
+        // 加速下落（S/下键触发的快速下落）
+        function tetrisSoftDrop() {
+            if (!tetrisState.active) return;
+            tetrisMoveDown();
+            if (tetrisState.active) drawBoard();
+        }
+
+        // 四象限点击操控
+        function handleTetrisQuadrant(quadrant) {
+            if (!tetrisState.active) return;
+            switch (quadrant) {
+                case 'top': tetrisTryRotate(); break;
+                case 'bottom': tetrisHardDrop(); break;
+                case 'left': tetrisMoveLeft(); break;
+                case 'right': tetrisMoveRight(); break;
+            }
+            if (tetrisState.active) drawBoard();
+        }
+
+        // 键盘操控
+        function handleTetrisKey(key) {
+            if (!tetrisState.active) return;
+            switch (key) {
+                case 'ArrowUp': case 'w': case 'W': tetrisTryRotate(); break;
+                case 'ArrowDown': case 's': case 'S': tetrisSoftDrop(); break;
+                case 'ArrowLeft': case 'a': case 'A': tetrisMoveLeft(); break;
+                case 'ArrowRight': case 'd': case 'D': tetrisMoveRight(); break;
+                case ' ': tetrisHardDrop(); break; // 空格硬降
+            }
+            if (tetrisState.active) drawBoard();
+        }
+
+        // ============================================================
         // 游戏逻辑
         // ============================================================
 
@@ -1692,6 +1930,12 @@
             currentTurn = currentTurn === 'red' ? 'blue' : 'red';
             selectedHandPiece = null; // 清将棋手持选中
             updateTurnUI();
+
+            // ===== 俄罗斯方块回合：直接进入下落，不走自治输赢 =====
+            if (isTetris(currentTurn)) {
+                tetrisStartTurn();
+                return false;
+            }
 
             // ===== 自治输赢：刚走棋方判赢 + 当前方判输 =====
             const prevColor = currentTurn === 'red' ? 'blue' : 'red';
@@ -2061,6 +2305,12 @@
             victoryReason = '';
             selectedHandPiece = null;
             statusBar.classList.remove('victory');
+            // 重置俄罗斯方块状态
+            tetrisStopFall();
+            tetrisState.active = false;
+            tetrisState.cells = [];
+            tetrisState.pieceType = null;
+            tetrisDefeated = false;
             updateTurnUI();
             const first = `红方（${rulesetName('red')}）`;
             const second = `黑方（${rulesetName('blue')}）`;
@@ -2081,7 +2331,8 @@
             shogi: ['shogi-king', 'shogi-gold', 'shogi-silver', 'shogi-knight', 'shogi-lance', 'shogi-pawn', 'shogi-rook', 'shogi-bishop'],
             go: ['go-stone'],
             gomoku: ['gomoku-stone'],
-            checkers: ['checker-man', 'checker-king']
+            checkers: ['checker-man', 'checker-king'],
+            tetris: ['tetris-block']
         };
 
         function buildSandboxPanel(containerId, color) {
@@ -2288,6 +2539,12 @@
             winner = null;
             victoryReason = '';
             currentTurn = 'red'; // 红方先手
+            // 重置俄罗斯方块状态
+            tetrisStopFall();
+            tetrisState.active = false;
+            tetrisState.cells = [];
+            tetrisState.pieceType = null;
+            tetrisDefeated = false;
 
             // 初始化围棋/五子棋储备（根据核心棋种）
             goReserve = { red: 0, blue: 0 };
@@ -2867,6 +3124,18 @@
                 return;
             }
 
+            // 俄罗斯方块模式：点击四象限操控
+            if (tetrisState.active) {
+                // 以画布中心为原点，判断点击在哪个象限
+                const cx = rect.width / 2, cy = rect.height / 2;
+                if (Math.abs(x - cx) < Math.abs(y - cy)) {
+                    handleTetrisQuadrant(y < cy ? 'top' : 'bottom');
+                } else {
+                    handleTetrisQuadrant(x < cx ? 'left' : 'right');
+                }
+                return;
+            }
+
             if (gameOver) return;
 
             // 围棋方：点击空位落子
@@ -3216,6 +3485,24 @@
                 }
             }
 
+            // 绘制下落中的俄罗斯方块
+            if (tetrisState.active && tetrisState.cells.length > 0) {
+                const size = cellSize;
+                const clr = tetrisState.color || '#2979ff';
+                const r = parseInt(clr.slice(1,3), 16);
+                const g = parseInt(clr.slice(3,5), 16);
+                const b = parseInt(clr.slice(5,7), 16);
+                for (const [y, x] of tetrisState.cells) {
+                    if (y < 0 || y >= ROWS || x < 0 || x >= COLS) continue;
+                    const pos = getPos(y, x);
+                    const bx = pos.x - size / 2, by = pos.y - size / 2;
+                    ctx.fillStyle = `rgba(${r},${g},${b},1)`;
+                    ctx.fillRect(bx, by, size, size);
+                    ctx.fillStyle = 'rgba(255,255,255,0.18)';
+                    ctx.fillRect(bx + 1, by + 1, size - 2, size * 0.25);
+                }
+            }
+
             // 绘制高亮（走法提示）
             for (const m of validMoves) {
                 const pos = getPos(m.row, m.col);
@@ -3463,6 +3750,19 @@
                 return;
             }
 
+            // 俄罗斯方块block：实心彩色方块，无缝隙
+            if (piece.type === 'tetris-block') {
+                const size = cellSize;
+                const bx = x - size / 2, by = y - size / 2;
+                const clr = piece.blockColor || '#2979ff';
+                ctx.fillStyle = clr;
+                ctx.fillRect(bx, by, size, size);
+                // 内高光
+                ctx.fillStyle = 'rgba(255,255,255,0.12)';
+                ctx.fillRect(bx + 1, by + 1, size - 2, size * 0.35);
+                return;
+            }
+
             // 阴影
             ctx.shadowColor = 'rgba(0,0,0,0.3)';
             ctx.shadowBlur = 6;
@@ -3571,6 +3871,13 @@
         document.getElementById('resetBtn').addEventListener('click', resetGame);
         document.getElementById('configBtn').addEventListener('click', openConfig);
         document.getElementById('startBtn').addEventListener('click', startFromConfig);
+
+        // 俄罗斯方块键盘操控
+        document.addEventListener('keydown', function(e) {
+            if (!tetrisState.active) return;
+            e.preventDefault();
+            handleTetrisKey(e.key);
+        });
 
         // 沙盒模式按钮
         document.getElementById('sandboxBtn').addEventListener('click', function() {
